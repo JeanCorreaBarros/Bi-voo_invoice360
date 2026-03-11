@@ -1,6 +1,8 @@
 export interface InvoiceLineItem {
   description: string
   amount: number
+  quantity?: number
+  unitPrice?: number
 }
 
 export interface Invoice {
@@ -13,6 +15,8 @@ export interface Invoice {
   status: "Unsent" | "Viewed" | "Paid" | "Draft" | "Overdue" | "Sent" | "Partial" | "Cancelled"
   amount: number
   daysAgo: string
+  createdAt?: string
+  dueDate?: string
   lineItems: InvoiceLineItem[]
   subtotal: number
   total: number

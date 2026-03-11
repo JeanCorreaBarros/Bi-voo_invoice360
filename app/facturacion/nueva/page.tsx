@@ -55,7 +55,7 @@ import { BivooLoader } from "@/components/bivoo-loader"
 import { AuthGuard } from "@/components/auth-guard"
 import { ModuleLayout } from "@/components/module-layout"
 import { motion } from "framer-motion"
-import { ArrowLeft, Save, Send, PlusCircle, Trash2, HelpCircle, Download, Printer, ChevronRight, ChevronLeft } from "lucide-react"
+import { ArrowLeft, Save, Send, PlusCircle, Trash2, HelpCircle, Download, Printer, ChevronRight, ChevronLeft, Eye, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
@@ -160,6 +160,7 @@ export default function NuevaFacturaPage() {
     const [isSavingDraft, setIsSavingDraft] = useState(false)
     const [showDownloadDialog, setShowDownloadDialog] = useState(false)
     const [currentInvoiceId, setCurrentInvoiceId] = useState<number | null>(null)
+    const [showSimulationModal, setShowSimulationModal] = useState(false)
     const [showPreviewModal, setShowPreviewModal] = useState(false)
     const [previewUrl, setPreviewUrl] = useState<string | null>(null)
     const [orderResolution, setOrderResolution] = useState("RES-2026-001") // default
@@ -1026,6 +1027,10 @@ export default function NuevaFacturaPage() {
                             <h1 className="text-xl md:text-2xl font-bold">Nueva Factura de Venta</h1>
                         </div>
                         <div className="hidden md:flex flex-wrap gap-2 w-full md:w-auto">
+                            <Button variant="outline" className="flex items-center gap-1 hover:bg-[hsl(200,80%,40%)] shadow-lg hover:text-white bg-white" onClick={() => setShowSimulationModal(true)}>
+                                <Eye className="h-4 w-4" />
+                                Previsualizar
+                            </Button>
                             <Button variant="outline" className="flex items-center gap-1 hover:bg-[hsl(147,88%,41%)] shadow-lg  hover:text-white bg-white" onClick={handleSaveDraft} disabled={isSavingDraft}>
                                 <Save className="h-4 w-4" />
                                 {isSavingDraft ? "Guardando..." : "Guardar Borrador"}
@@ -2100,11 +2105,11 @@ export default function NuevaFacturaPage() {
                             </Button>
                         ) : (
                             <div className="flex gap-2 ml-auto">
-                                <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft}>
-                                    <Save className="w-4 h-4 mr-1" /> Guardar
+                                <Button variant="outline" onClick={() => setShowSimulationModal(true)} className="flex-1">
+                                    <Eye className="w-4 h-4 mr-1" /> PDF
                                 </Button>
-                                <Button onClick={handleEmitInvoice} disabled={isEmitting} className="hidden">
-                                    <Send className="w-4 h-4 mr-1" /> Emitir
+                                <Button variant="outline" onClick={handleSaveDraft} disabled={isSavingDraft} className="flex-1">
+                                    <Save className="w-4 h-4 mr-1" /> Guardar
                                 </Button>
                             </div>
                         )}
@@ -2140,7 +2145,7 @@ export default function NuevaFacturaPage() {
                 </Dialog>
                 {/* Preview Modal */}
                 <Dialog open={showPreviewModal} onOpenChange={setShowPreviewModal}>
-                    <DialogContent className="max-w-4xl w-[95vw] h-[90vh] bg-white p-0 overflow-hidden">
+                    <DialogContent className="max-w-4xl w-[95vw] h-[90vh] bg-white p-0 overflow-hidden z-[110]">
                         <DialogHeader className="p-4 border-b">
                             <DialogTitle>Previsualización de Factura</DialogTitle>
                         </DialogHeader>
@@ -2158,8 +2163,226 @@ export default function NuevaFacturaPage() {
                             )}
                         </div>
                         <DialogFooter className="p-4 border-t bg-gray-50">
-                            <Button onClick={() => setShowPreviewModal(false)}>Cerrar</Button>
+                            <div className="flex justify-end gap-2 px-4 py-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        if (previewUrl) {
+                                            const a = document.createElement('a');
+                                            a.href = previewUrl;
+                                            a.download = `invoice-${currentInvoiceId}.pdf`;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            document.body.removeChild(a);
+                                        }
+                                    }}
+                                >
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Descargar PDF
+                                </Button>
+                                <Button onClick={() => setShowPreviewModal(false)}>Cerrar</Button>
+                            </div>
                         </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+                {/* Simulation Modal */}
+                <Dialog open={showSimulationModal} onOpenChange={setShowSimulationModal}>
+                    <DialogContent className="max-w-4xl w-[95vw] h-[90vh] bg-gray-100 p-0 overflow-y-auto z-[120]">
+                        <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center z-10">
+                            <div>
+                                <DialogTitle className="text-lg font-black text-[hsl(209,79%,27%)]">Simulación de Factura</DialogTitle>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Vista previa antes de emitir</p>
+                            </div>
+                            <Button onClick={() => setShowSimulationModal(false)} variant="ghost" size="icon">
+                                <X size={20} />
+                            </Button>
+                        </div>
+
+                        <div className="p-4 md:p-8 flex justify-center">
+                            <div className="bg-white w-full max-w-[800px] min-h-[1000px] shadow-2xl p-8 md:p-12 flex flex-col font-sans text-gray-800">
+                                {/* Header - 3 Equal Sections */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 items-start gap-8 mb-10 border-b-2 border-[hsl(209,79%,27%)] pb-8">
+                                    {/* Column 1: Logo */}
+                                    <div className="flex justify-start">
+                                        <div className="w-28 h-28 bg-white flex items-center justify-center p-2 rounded-xl border border-gray-100 shadow-sm">
+                                            {logoPreview ? (
+                                                <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" />
+                                            ) : (
+                                                <img src="/Logo-PlasticosLC.png" alt="Logo default" className="w-full h-full object-contain" />
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Column 2: Company Info (Centered) */}
+                                    <div className="flex flex-col items-center text-center">
+                                        <h1 className="text-lg font-black uppercase text-[hsl(209,79%,27%)] tracking-tight mb-1 leading-tight">
+                                            {company?.name || "DIANA CAROLINA RAMOS LOPEZ"}
+                                        </h1>
+                                        <div className="space-y-0">
+                                            <p className="text-[11px] font-bold text-gray-800">NIT: {company?.nit || "114344826"}</p>
+                                            <p className="text-[10px] text-gray-600 font-bold uppercase tracking-tight">Email: {company?.email || "info@plasticoslc.com"}</p>
+                                            <p className="text-[10px] text-gray-600 font-bold uppercase tracking-tight">Teléfono: {company?.phone || "3045503769"}</p>
+                                            <p className="text-[10px] text-gray-600 font-bold uppercase tracking-tight">Dirección: {company?.address || "CARRERA 13 No 27 - 17"}</p>
+                                            <p className="text-[10px] text-[hsl(209,79%,27%)] font-black uppercase tracking-widest mt-1 border-t border-gray-100 pt-1">Resolución: 1</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Column 3: Document Info (Right) */}
+                                    <div className="flex justify-end">
+                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 min-w-[160px] shadow-sm">
+                                            <div className="space-y-1">
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-[10px] font-black uppercase text-gray-400">Prefijo:</span>
+                                                    <span className="text-xs font-black text-[hsl(209,79%,27%)]">{getOrderPrefix()}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-[10px] font-black uppercase text-gray-400">Número:</span>
+                                                    <span className="text-xs font-black text-[hsl(209,79%,27%)]">26</span>
+                                                </div>
+                                                <div className="flex justify-between items-center gap-3 border-t border-gray-100 pt-1.5 mt-1.5">
+                                                    <span className="text-[10px] font-black uppercase text-gray-400">Fecha:</span>
+                                                    <span className="text-[11px] font-bold text-gray-900">{fecha || new Date().toLocaleDateString("es-CO")}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center gap-3">
+                                                    <span className="text-[10px] font-black uppercase text-gray-400">Vencimiento:</span>
+                                                    <span className="text-[11px] font-bold text-gray-900">{getPlazoPago() || "15"}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Customer Box */}
+                                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-6 mb-8">
+                                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-4">Datos del Cliente</h3>
+                                    <div className="grid grid-cols-2 gap-y-4">
+                                        <div>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase">Nombre / Razón Social</p>
+                                            <p className="text-sm font-black text-gray-900">{cliente || "Cliente no especificado"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase">NIT / Identificación</p>
+                                            <p className="text-sm font-bold text-gray-900">{identificacion || "---"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase">Dirección</p>
+                                            <p className="text-xs font-medium text-gray-600">{direccion || "---"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase">Teléfono</p>
+                                            <p className="text-xs font-medium text-gray-600">{telefono || "---"}</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Items Table */}
+                                <div className="flex-1">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="border-b-2 border-gray-100 bg-gray-50">
+                                                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500">Descripción</th>
+                                                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 text-center">Cant</th>
+                                                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 text-right">Precio</th>
+                                                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 text-right">Desc</th>
+                                                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 text-right">IVA</th>
+                                                <th className="py-3 px-4 text-[10px] font-black uppercase tracking-wider text-gray-500 text-right">Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {items.map((item, idx) => {
+                                                const baseTotal = (item.precio || 0) * (item.cantidad || 0);
+                                                const desc = item.descuento || 0;
+                                                const totalAfterDesc = baseTotal - desc;
+                                                const ivaVal = Number(String(item.impuesto || "0").replace("%", "")) / 100;
+                                                const ivaAmt = totalAfterDesc * ivaVal;
+                                                const totalItem = totalAfterDesc + ivaAmt;
+                                                return (
+                                                    <tr key={item.id} className="text-sm hover:bg-gray-50 transition-colors">
+                                                        <td className="py-4 px-4 font-bold text-gray-900">
+                                                            <div>{item.descripcion || "Item sin descripción"}</div>
+                                                            <div className="text-[10px] font-medium text-gray-400 uppercase mt-0.5">{item.referencia}</div>
+                                                        </td>
+                                                        <td className="py-4 px-4 text-center font-bold text-gray-600">{item.cantidad || 0}</td>
+                                                        <td className="py-4 px-4 text-right font-medium text-gray-600">{formatCurrency(item.precio || 0).replace("$", "")}</td>
+                                                        <td className="py-4 px-4 text-right font-medium text-red-400">-{formatCurrency(desc).replace("$", "")}</td>
+                                                        <td className="py-4 px-4 text-right font-medium text-gray-500">{item.impuesto}</td>
+                                                        <td className="py-4 px-4 text-right font-black text-[hsl(209,79%,27%)]">{formatCurrency(totalItem).replace("$", "")}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Totals Section */}
+                                <div className="mt-10 border-t pt-8 flex justify-end">
+                                    <div className="w-full max-w-[320px] space-y-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                                        <div className="flex justify-between items-center text-sm font-bold text-gray-700">
+                                            <span>Subtotal:</span>
+                                            <span className="text-gray-900">{formatCurrency(subtotal)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm font-bold text-red-500">
+                                            <span>Descuentos:</span>
+                                            <span>-{formatCurrency(descuento)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm font-bold text-gray-700">
+                                            <span>IVA:</span>
+                                            <span className="text-gray-900">{formatCurrency(impuestos)}</span>
+                                        </div>
+                                        <div className="h-[1px] bg-gray-100 my-2"></div>
+                                        <div className="flex justify-between items-center text-sm font-black text-[hsl(209,79%,27%)]">
+                                            <span>Total con IVA:</span>
+                                            <span>{formatCurrency(total)}</span>
+                                        </div>
+                                        <div className="h-[1px] bg-gray-100 my-2"></div>
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between items-center text-xs font-bold text-gray-500">
+                                                <span>Retefuente (0%):</span>
+                                                <span className="text-gray-900">-$0,00</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs font-bold text-gray-500">
+                                                <span>RetelCA (0%):</span>
+                                                <span className="text-gray-900">-$0,00</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs font-bold text-gray-500">
+                                                <span>RetelVA (0%):</span>
+                                                <span className="text-gray-900">-$0,00</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs font-bold text-gray-500">
+                                                <span>Autoretención (0%):</span>
+                                                <span className="text-gray-900">-$0,00</span>
+                                            </div>
+                                        </div>
+                                        <div className="h-[2px] bg-[hsl(209,79%,27%)] my-3"></div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-black uppercase tracking-tight text-gray-900">TOTAL A PAGAR:</span>
+                                            <span className="text-xl font-black text-[hsl(209,79%,27%)]">{formatCurrency(total)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Footer info */}
+                                <div className="mt-auto border-t pt-8 text-[10px] text-gray-400 font-medium flex justify-between items-end">
+                                    <div>
+                                        <p className="uppercase tracking-widest mb-1 italic">Representación gráfica de la factura electrónica</p>
+                                        <p>Generado por: {process.env.NEXT_PUBLIC_APP_NAME || "Invoices360"}</p>
+                                    </div>
+                                    <div className="w-16 h-16 bg-gray-100 p-1 rounded-lg">
+                                        <div className="w-full h-full border-2 border-gray-200 border-dashed rounded flex items-center justify-center text-[8px] font-black text-gray-300">QR CODE</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="sticky bottom-0 bg-white border-t p-4 flex justify-center gap-4">
+                            <Button onClick={() => window.print()} variant="outline" className="gap-2">
+                                <Printer size={16} /> Imprimir borrador
+                            </Button>
+                            <Button onClick={() => setShowSimulationModal(false)} className="bg-[hsl(209,79%,27%)]">
+                                Volver a editar
+                            </Button>
+                        </div>
                     </DialogContent>
                 </Dialog>
 

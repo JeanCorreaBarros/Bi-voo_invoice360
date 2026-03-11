@@ -3,55 +3,53 @@
 import { useEffect, useState } from "react"
 import { TrendingUp, Clock, Wallet, ArrowUpRight } from "lucide-react"
 
-interface ApiData {
-  overdue: { total: number; count: number; items: [] }
-  dueThisMonth: { total: number; count: number; items: [] }
-  averagePaymentDays: number
-  availableForPayment: { total: number; count: number; items: [] }
+interface DashboardApiData {
+  salesToday: number
+  salesMonth: number
+  accountsReceivable: number
+  overdueInvoices: number
+  cashFlow: number
+  topProducts: any[]
 }
 
 const summaryDataTemplate = [
   {
-    label: "Vencidas",
+    label: "Ventas del Mes",
     icon: TrendingUp,
-    color: "text-[hsl(0,84%,60%)]",
+    color: "text-[hsl(142,70%,45%)]",
     months: ["Sep", "Oct", "Nov", "Dic"],
     chartPoints: [30, 50, 25, 65, 40, 75, 55, 80],
-    key: "overdue",
+    key: "salesMonth",
+    isCurrency: true
   },
   {
-    label: "Vence proximo mes",
+    label: "Cuentas por Cobrar",
     icon: ArrowUpRight,
     color: "text-[hsl(45,100%,60%)]",
     months: ["Sep", "Oct", "Nov", "Dic"],
     chartPoints: [20, 45, 60, 35, 55, 70, 45, 85],
-    key: "dueThisMonth",
+    key: "accountsReceivable",
+    isCurrency: true
   },
   {
-    label: "Tiempo promedio de pago",
-    suffix: "dias",
+    label: "Facturas Vencidas",
+    suffix: "facturas",
     icon: Clock,
-    color: "text-[hsl(0,0%,70%)]",
+    color: "text-[hsl(0,84%,60%)]",
     months: ["Sep", "Oct", "Nov", "Dic"],
     chartPoints: [50, 40, 65, 30, 55, 45, 70, 60],
-    key: "averagePaymentDays",
+    key: "overdueInvoices",
+    isCurrency: false
   },
 ]
 
 const payoutDataTemplate = {
-  label: "Disponible para Pago",
-  expects: "Esperado",
-  key: "availableForPayment",
+  label: "Flujo de Caja",
+  expects: "Total",
+  key: "cashFlow",
 }
 
-const avatars = ["CM", "AR", "MJ", "PV", "LD"]
-const avatarColors = [
-  "bg-[hsl(200,70%,50%)]",
-  "bg-[hsl(340,70%,50%)]",
-  "bg-[hsl(160,70%,40%)]",
-  "bg-[hsl(30,80%,50%)]",
-  "bg-[hsl(270,60%,50%)]",
-]
+const MAX_TOP_PRODUCTS = 5;
 
 function MiniChart({ points }: { points: number[] }) {
   const width = 200
@@ -84,12 +82,17 @@ function MiniChart({ points }: { points: number[] }) {
 }
 
 export function SummaryCards() {
-  const [data, setData] = useState<ApiData | null>(null)
+  const [data, setData] = useState<DashboardApiData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Modal states
+  const [showTopProductsModal, setShowTopProductsModal] = useState(false)
+  const [modalData, setModalData] = useState<{ product: string; quantity: number }[]>([])
+  const [modalLoading, setModalLoading] = useState(false)
+
   useEffect(() => {
-    const fetchInvoiceData = async () => {
+    const fetchDashboardData = async () => {
       try {
         setIsLoading(true)
         const token = sessionStorage.getItem("token")
@@ -98,7 +101,7 @@ export function SummaryCards() {
           throw new Error("Token de autenticación no encontrado")
         }
 
-        const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}dashboard/invoices`
+        const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}dashboard`
         const response = await fetch(apiUrl, {
           headers: {
             "Authorization": `Bearer ${token}`,
@@ -106,7 +109,7 @@ export function SummaryCards() {
           },
         })
 
-        if (!response.ok) throw new Error("Error fetching invoice data")
+        if (!response.ok) throw new Error("Error fetching dashboard data")
         const result = await response.json()
         setData(result.data)
         setError(null)
@@ -118,12 +121,42 @@ export function SummaryCards() {
       }
     }
 
-    fetchInvoiceData()
+    fetchDashboardData()
   }, [])
+
+  // Fetch modal data when it opens
+  useEffect(() => {
+    if (showTopProductsModal) {
+      const fetchModalData = async () => {
+        try {
+          setModalLoading(true)
+          const token = sessionStorage.getItem("token")
+          const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}dashboard/top-products`
+          const response = await fetch(apiUrl, {
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          })
+
+          if (!response.ok) throw new Error("Error fetching modal data")
+          const result = await response.json()
+          if (result.ok) {
+            setModalData(result.data)
+          }
+        } catch (err) {
+          console.error("Error fetching top products modal:", err)
+        } finally {
+          setModalLoading(false)
+        }
+      }
+      fetchModalData()
+    }
+  }, [showTopProductsModal])
 
   // Formatear números como moneda
   const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("es-ES", {
+    return amount.toLocaleString("es-CO", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
@@ -131,22 +164,23 @@ export function SummaryCards() {
 
   // Construir datos dinámicos con información de la API
   const summaryData = summaryDataTemplate.map((template) => {
-    if (!data) return { ...template, amount: "0.00" }
+    if (!data) return { ...template, amount: "0", isCurrency: template.isCurrency }
 
-    if (template.key === "overdue") {
-      return { ...template, amount: formatCurrency(data.overdue.total) }
-    } else if (template.key === "dueThisMonth") {
-      return { ...template, amount: formatCurrency(data.dueThisMonth.total) }
-    } else if (template.key === "averagePaymentDays") {
-      return { ...template, amount: String(data.averagePaymentDays) }
+    let value = 0;
+    if (template.key === "salesMonth") value = data.salesMonth;
+    if (template.key === "accountsReceivable") value = data.accountsReceivable;
+    if (template.key === "overdueInvoices") value = data.overdueInvoices;
+
+    return {
+      ...template,
+      amount: template.isCurrency ? formatCurrency(value) : String(value)
     }
-    return { ...template, amount: "0.00" }
   })
 
   const payoutData = data
     ? {
       ...payoutDataTemplate,
-      amount: formatCurrency(data.availableForPayment.total),
+      amount: formatCurrency(data.cashFlow),
     }
     : { ...payoutDataTemplate, amount: "0.00" }
 
@@ -159,7 +193,7 @@ export function SummaryCards() {
   }
 
   return (
-    <div className="grid grid-cols-1  md:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
       {/* Metric Cards */}
       {summaryData.map((item) => (
         <div
@@ -167,16 +201,18 @@ export function SummaryCards() {
           className="rounded-2xl border shadow-xl hover:scale-95 border-border bg-card p-5 flex flex-col gap-2"
         >
           <div className="flex items-center justify-between">
-            <span className="text-black text-xs font-sans">{item.label}</span>
-            <item.icon className={`h-4 w-4 ${item.color}`} />
+            <span className="text-black font-semibold text-xs font-sans tracking-wide uppercase opacity-70">{item.label}</span>
+            <div className={`p-1.5 rounded-lg ${item.color.replace('text-', 'bg-').replace(')]', ',0.15)')}`}>
+              <item.icon className={`h-4 w-4 ${item.color}`} />
+            </div>
           </div>
-          <div className="flex items-baseline gap-1.5">
-            {!item.suffix && <span className="text-[hsl(0,0%,55%)] text-sm font-sans">$</span>}
-            <span className="text-2xl font-bold text-[hsl(0,3%,14%)] font-sans tracking-tight">
+          <div className="flex items-baseline gap-1.5 mt-2">
+            {item.isCurrency && <span className="text-[hsl(0,0%,55%)] text-sm font-sans">$</span>}
+            <span className="text-3xl font-extrabold text-[hsl(209,83%,23%)] font-sans tracking-tight">
               {item.amount}
             </span>
             {item.suffix && (
-              <span className="text-base text-black font-sans ml-0.5">{item.suffix}</span>
+              <span className="text-sm font-medium text-gray-500 font-sans ml-0.5">{item.suffix}</span>
             )}
           </div>
           {/* Mini line chart */}
@@ -187,17 +223,6 @@ export function SummaryCards() {
               <span key={m} className="text-[10px] text-muted-foreground font-sans">
                 {m}
               </span>
-            ))}
-          </div>
-          {/* Avatar group */}
-          <div className="flex items-center -space-x-2 mt-1">
-            {avatars.slice(0, 4).map((a, i) => (
-              <div
-                key={`avatar-${item.label}-${a}`}
-                className={`w-7 h-7 rounded-full ${avatarColors[i]} border-2 border-card flex items-center justify-center`}
-              >
-                <span className="text-[10px] font-bold text-[hsl(0,0%,95%)] font-sans">{a}</span>
-              </div>
             ))}
           </div>
         </div>
@@ -252,6 +277,120 @@ export function SummaryCards() {
           Pagar ahora
         </button>
       </div>
+
+      {/* Top Products Card */}
+      {data && data.topProducts && data.topProducts.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between min-h-[160px] shadow-xl xl:col-span-1">
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-black text-[10px] font-black font-sans uppercase tracking-widest">Productos más vendidos</span>
+            <span className="text-[10px] text-muted-foreground font-sans bg-gray-100 px-2 py-0.5 rounded-full">Top {data.topProducts.length}</span>
+          </div>
+          <div className="flex-1 flex items-end gap-2 h-full mt-2 justify-center mb-4">
+            {data.topProducts.map((p, i) => {
+              const maxQuantity = Math.max(...data.topProducts.map(tp => tp.quantity));
+              const heightPercentage = Math.max(10, (p.quantity / maxQuantity) * 100);
+              return (
+                <div key={p.productId || i} className="group relative flex flex-col items-center justify-end flex-1 h-24">
+                  <div className="absolute -top-10 bg-gray-800 text-white text-[10px] py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 shadow-lg">
+                    <p className="font-bold">{p.productName || "Producto"}</p>
+                    <p>{p.quantity} unidades</p>
+                  </div>
+                  <div
+                    className="w-full bg-[hsl(209,83%,23%)] rounded-t-lg opacity-80 group-hover:opacity-100 transition-all cursor-pointer"
+                    style={{ height: `${heightPercentage}%` }}
+                  ></div>
+                  <span className="text-[8px] text-muted-foreground mt-1 truncate w-full text-center font-bold px-0.5" title={p.productName}>
+                    {p.productName?.split(' ')[0] || "Prod"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowTopProductsModal(true)}
+            className="w-full py-2 rounded-xl bg-[hsl(209,83%,23%)] text-white text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-lg active:scale-95"
+          >
+            Ver detalles
+          </button>
+        </div>
+      )}
+
+      {/* Top Products Modal */}
+      {showTopProductsModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowTopProductsModal(false)}
+          />
+          <div className="relative bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-[hsl(209,83%,23%)] text-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-white/10">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black font-sans tracking-tight">Ranking de Productos</h3>
+                  <p className="text-white/60 text-xs font-medium">Análisis detallado de ventas por ítem</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTopProductsModal(false)}
+                className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+              >
+                <Clock className="h-5 w-5 rotate-45" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
+              {modalLoading ? (
+                <div className="flex flex-col items-center justify-center h-64 gap-4">
+                  <div className="w-10 h-10 border-4 border-[hsl(209,83%,23%)] border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[10px] uppercase font-black text-muted-foreground tracking-widest">Cargando reporte...</span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {modalData.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100 hover:border-[hsl(209,83%,23%,0.2)] transition-all group"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-[hsl(209,83%,23%)] text-white flex items-center justify-center font-black text-sm shrink-0">
+                        {idx + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-900 truncate">{item.product}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <div className="h-1.5 flex-1 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-[hsl(209,83%,23%)]"
+                              style={{ width: `${(item.quantity / modalData[0].quantity) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-lg font-black text-[hsl(209,83%,23%)]">{item.quantity}</p>
+                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">Unidades</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setShowTopProductsModal(false)}
+                className="px-6 py-2.5 rounded-xl bg-white border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-100 transition-all shadow-sm"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

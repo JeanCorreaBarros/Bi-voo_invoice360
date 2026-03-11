@@ -3,7 +3,12 @@
 import { useState, useEffect, useCallback } from "react"
 import { type Invoice } from "@/lib/invoice-data"
 import { InvoiceDetail } from "./invoice-detail"
-import { Search, Filter, MoreVertical, ChevronDown, X } from "lucide-react"
+import { Search, Filter, MoreVertical, ChevronDown, X, CreditCard, DollarSign } from "lucide-react"
+import { toast } from "react-hot-toast"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
 
 type TabFilter = "all" | "draft" | "pending" | "send" | "paid"
 
@@ -18,6 +23,11 @@ export function InvoiceList() {
   const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
+
+  // Payment Modal State
+  const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState<string>("")
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
 
   // Fetch invoices from API
   const fetchInvoices = useCallback(async () => {
@@ -61,9 +71,13 @@ export function InvoiceList() {
           status: (inv.status === "DRAFT" ? "Draft" : inv.status === "SENT" ? "Sent" : inv.status === "PENDING" ? "Unsent" : inv.status === "PARTIAL" ? "Partial" : inv.status === "PAID" ? "Paid" : inv.status === "CANCELLED" ? "Cancelled" : inv.status === "OVERDUE" ? "Overdue" : "Unsent") as Invoice['status'],
           amount: Number(inv.orderTotalAfterTax || 0),
           daysAgo: inv.orderDate ? `hace ${Math.floor((Date.now() - new Date(inv.orderDate).getTime()) / (1000 * 60 * 60 * 24))} dias` : "N/A",
+          createdAt: inv.createdAt || inv.orderDate || null,
+          dueDate: inv.dueDate || null,
           lineItems: (inv.details || []).map((detail: any) => ({
             description: detail.itemName || detail.product?.name || "Sin nombre",
-            amount: Number(detail.orderItemPrice || 0),
+            amount: Number(detail.orderItemFinalAmount || detail.orderItemPrice || 0),
+            quantity: Number(detail.orderItemQuantity || 1),
+            unitPrice: Number(detail.orderItemPrice || 0),
           })),
           subtotal: Number(inv.orderSubtotalBeforeTax || 0),
           total: Number(inv.orderTotalAfterTax || 0),
@@ -123,6 +137,71 @@ export function InvoiceList() {
   const handleSelectInvoice = (inv: Invoice) => {
     setSelectedInvoice(inv)
     setShowDetail(true)
+  }
+
+  const handlePaymentClick = (inv: Invoice) => {
+    setPaymentInvoice(inv)
+    setPaymentAmount(inv.balanceDue.toString())
+  }
+
+  const confirmPayment = async () => {
+    if (!paymentInvoice) return
+    const amountNum = parseFloat(paymentAmount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error("Ingrese un monto válido")
+      return
+    }
+
+    const processPayment = async (amount: number) => {
+      try {
+        setIsProcessingPayment(true)
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+        const token = sessionStorage.getItem("token")
+        const res = await fetch(`${apiBase}payments`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            invoiceId: Number(paymentInvoice.id),
+            amount: amount,
+            method: "CASH",
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          toast.error((err as any)?.message || "Error al registrar el pago")
+          return
+        }
+        toast.success("Pago registrado exitosamente")
+        setPaymentInvoice(null)
+        fetchInvoices() // Refresh list
+      } catch {
+        toast.error("Error de red al procesar el pago")
+      } finally {
+        setIsProcessingPayment(false)
+      }
+    }
+
+    toast((t) => (
+      <div className="flex flex-col gap-3">
+        <p className="font-semibold text-sm text-[hsl(222,15%,20%)]">
+          ¿Estás seguro de registrar un pago de ${amountNum.toLocaleString("es-CO", { minimumFractionDigits: 2 })} en efectivo (CASH)?
+        </p>
+        <div className="flex justify-end gap-2 mt-1">
+          <Button variant="outline" size="sm" onClick={() => toast.dismiss(t.id)} disabled={isProcessingPayment}>
+            Cancelar
+          </Button>
+          <Button size="sm" className="bg-[hsl(209,83%,23%)] text-white hover:bg-[hsl(209,83%,30%)]" disabled={isProcessingPayment} onClick={() => {
+            toast.dismiss(t.id)
+            processPayment(amountNum)
+          }}>
+            Aceptar
+          </Button>
+        </div>
+      </div>
+    ), { duration: Infinity, id: 'payment-confirm' })
   }
 
   return (
@@ -246,11 +325,18 @@ export function InvoiceList() {
               </div>
             ) : (
               filteredInvoices.map((inv) => (
-                <button
+                <div
                   key={inv.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleSelectInvoice(inv)}
-                  className={`flex items-center gap-3 hover:scale-95 p-3 rounded-xl transition-all text-left w-full group ${selectedInvoice?.id === inv.id
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleSelectInvoice(inv)
+                    }
+                  }}
+                  className={`flex items-center gap-3 hover:scale-95 p-3 rounded-xl transition-all text-left w-full group cursor-pointer ${selectedInvoice?.id === inv.id
                     ? "bg-[hsl(209,83%,23%)] ring-1 ring-[hsl(90,100%,50%,0.3)] text-[hsl(0,0%,95%)]"
                     : "text-[hsl(222,15%,10%)] hover:bg-[hsl(209,83%,23%)]"
                     }`}
@@ -307,19 +393,45 @@ export function InvoiceList() {
                       <span className={`text-[13px] font-medium font-sans truncate transition-colors ${selectedInvoice?.id === inv.id ? "text-white/90" : "text-[hsl(222,15%,20%)] group-hover:text-white/90"}`}>
                         {inv.customer}
                       </span>
-                      <span className={`text-[11px] font-sans transition-colors ${selectedInvoice?.id === inv.id ? "text-white/60" : "text-muted-foreground group-hover:text-white/60"}`}>
-                        {inv.daysAgo}
-                      </span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[11px] font-sans transition-colors ${selectedInvoice?.id === inv.id ? "text-white/60" : "text-muted-foreground group-hover:text-white/60"}`}>
+                          <span className="font-semibold text-[9px] uppercase tracking-wider mr-1 opacity-70">CREA:</span>
+                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("en-GB") : inv.daysAgo}
+                        </span>
+                        {inv.dueDate && (
+                          <>
+                            <span className={`text-[10px] ${selectedInvoice?.id === inv.id ? "text-white/30" : "text-border group-hover:text-white/30"}`}>|</span>
+                            <span className={`text-[11px] font-sans transition-colors ${selectedInvoice?.id === inv.id ? "text-orange-200" : "text-orange-600/80 group-hover:text-orange-200"}`}>
+                              <span className="font-semibold text-[9px] uppercase tracking-wider mr-1 opacity-70">VENCE:</span>
+                              {new Date(inv.dueDate).toLocaleDateString("en-GB")}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Amount */}
-                  <div className="text-right shrink-0">
+                  {/* Amount + Payment button */}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
                     <span className={`text-sm font-semibold font-sans transition-colors ${selectedInvoice?.id === inv.id ? "text-white" : "text-[hsl(222,15%,10%)] group-hover:text-white"}`}>
                       ${inv.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </span>
+                    {inv.status !== "Paid" && inv.status !== "Cancelled" && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handlePaymentClick(inv) }}
+                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors ${selectedInvoice?.id === inv.id
+                          ? "bg-green-400/30 text-green-200 hover:bg-green-400/50"
+                          : "bg-green-100 text-green-700 hover:bg-green-200 group-hover:bg-green-400/30 group-hover:text-green-100"
+                          }`}
+                        aria-label="Registrar pago"
+                        title="Registrar pago"
+                      >
+                        <CreditCard className="h-2.5 w-2.5" /> Pagar
+                      </button>
+                    )}
                   </div>
-                </button>
+                </div>
               ))
             )}
           </div>
@@ -381,6 +493,52 @@ export function InvoiceList() {
             )}
           </>
         )}
+
+        {/* Payment Modal */}
+        <Dialog open={!!paymentInvoice} onOpenChange={(open) => !open && setPaymentInvoice(null)}>
+          <DialogContent className="sm:max-w-[425px] bg-white/95 backdrop-blur-md border border-gray-200/50 shadow-2xl">
+            <DialogHeader>
+              <DialogTitle>Registrar Pago</DialogTitle>
+              <DialogDescription>
+                Introduce el monto a pagar para la factura #{paymentInvoice?.number}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="amount">Monto del Pago (Efectivo)</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="amount"
+                    type="number"
+                    placeholder="0.00"
+                    className="pl-9"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    disabled={isProcessingPayment}
+                  />
+                </div>
+              </div>
+              {paymentInvoice && (
+                <div className="text-sm text-muted-foreground mt-2">
+                  <div className="flex justify-between">
+                    <span>Saldo Pendiente:</span>
+                    <span className="font-semibold text-gray-900">${paymentInvoice.balanceDue.toLocaleString("es-CO", { minimumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPaymentInvoice(null)} disabled={isProcessingPayment}>
+                Cancelar
+              </Button>
+              <Button onClick={confirmPayment} disabled={isProcessingPayment || !paymentAmount} className="bg-green-600 hover:bg-green-700 text-white">
+                {isProcessingPayment ? "Procesando..." : "Realizar Pago"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </div>
   )

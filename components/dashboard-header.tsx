@@ -20,6 +20,7 @@ import {
   Users,
   FolderOpen,
   ChevronRight,
+  DollarSign,
 } from "lucide-react"
 
 /* ─────────────────────────────────────────────
@@ -28,6 +29,7 @@ import {
 const navItems = [
   { icon: FileText, label: "Facturas", section: "principal", href: "/" },
   { icon: ShoppingCart, label: "Compras", section: "principal", href: "/compras" },
+  { icon: DollarSign, label: "Cartera", section: "gestion", href: "/cartera" },
   { icon: BarChart3, label: "Reportes", section: "gestion", href: "/reportes" },
   { icon: Users, label: "Clientes", section: "gestion", href: "/clientes" },
   { icon: FolderOpen, label: "Productos", section: "gestion", href: "/productos" },
