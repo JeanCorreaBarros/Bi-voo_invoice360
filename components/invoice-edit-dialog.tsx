@@ -280,6 +280,7 @@ export function InvoiceEditDialog({ invoiceId, isOpen, onClose, onSave }: Invoic
                 if (!res.ok) {
                     const txt = await res.text().catch(() => "")
                     console.error("Error fetching clients:", res.status, txt)
+                    toast.error(`Error al cargar clientes: ${res.status}`)
                     setClientsList([])
                 } else {
                     const data = await res.json().catch(() => [])
@@ -287,6 +288,7 @@ export function InvoiceEditDialog({ invoiceId, isOpen, onClose, onSave }: Invoic
                 }
             } catch (err) {
                 console.error("Error fetching clients:", err)
+                toast.error("Error de conexión al cargar clientes")
                 setClientsList([])
             } finally {
                 setClientsLoading(false)
@@ -313,6 +315,7 @@ export function InvoiceEditDialog({ invoiceId, isOpen, onClose, onSave }: Invoic
                 if (!res.ok) {
                     const txt = await res.text().catch(() => "")
                     console.error("Error fetching users:", res.status, txt)
+                    toast.error(`Error al cargar usuarios: ${res.status}`)
                     setUsersList([])
                 } else {
                     const data = await res.json().catch(() => null)
@@ -320,6 +323,7 @@ export function InvoiceEditDialog({ invoiceId, isOpen, onClose, onSave }: Invoic
                 }
             } catch (err) {
                 console.error("Error fetching users:", err)
+                toast.error("Error de conexión al cargar usuarios")
                 setUsersList([])
             } finally {
                 setUsersLoading(false)
@@ -339,9 +343,12 @@ export function InvoiceEditDialog({ invoiceId, isOpen, onClose, onSave }: Invoic
                     if (data.ok && data.data && data.data.length > 0) {
                         setCompany(data.data[0]);
                     }
+                } else {
+                    toast.error(`Error al cargar datos de empresa: ${res.status}`)
                 }
             } catch (err) {
                 console.error('Error fetching company:', err);
+                toast.error("Error de conexión al cargar datos de empresa")
             }
         };
         fetchCompany();

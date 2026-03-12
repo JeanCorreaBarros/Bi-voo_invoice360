@@ -10,25 +10,44 @@ interface DashboardApiData {
   overdueInvoices: number
   cashFlow: number
   topProducts: any[]
+  // Potential trend data from API
+  salesTrend?: number[]
+  receivableTrend?: number[]
+  overdueTrend?: number[]
 }
+
+const getTrailingMonths = () => {
+  const months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+  const result = []
+  const today = new Date()
+  for (let i = 3; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
+    result.push(months[d.getMonth()])
+  }
+  return result
+}
+
+const trailingMonths = getTrailingMonths()
 
 const summaryDataTemplate = [
   {
     label: "Ventas del Mes",
     icon: TrendingUp,
     color: "text-[hsl(142,70%,45%)]",
-    months: ["Sep", "Oct", "Nov", "Dic"],
+    months: trailingMonths,
     chartPoints: [30, 50, 25, 65, 40, 75, 55, 80],
     key: "salesMonth",
+    trendKey: "salesTrend",
     isCurrency: true
   },
   {
     label: "Cuentas por Cobrar",
     icon: ArrowUpRight,
     color: "text-[hsl(45,100%,60%)]",
-    months: ["Sep", "Oct", "Nov", "Dic"],
+    months: trailingMonths,
     chartPoints: [20, 45, 60, 35, 55, 70, 45, 85],
     key: "accountsReceivable",
+    trendKey: "receivableTrend",
     isCurrency: true
   },
   {
@@ -36,9 +55,10 @@ const summaryDataTemplate = [
     suffix: "facturas",
     icon: Clock,
     color: "text-[hsl(0,84%,60%)]",
-    months: ["Sep", "Oct", "Nov", "Dic"],
+    months: trailingMonths,
     chartPoints: [50, 40, 65, 30, 55, 45, 70, 60],
     key: "overdueInvoices",
+    trendKey: "overdueTrend",
     isCurrency: false
   },
 ]
@@ -154,12 +174,26 @@ export function SummaryCards() {
     }
   }, [showTopProductsModal])
 
-  // Formatear números como moneda
+  // Formatear números como moneda sin decimales si son ,00
   const formatCurrency = (amount: number) => {
     return amount.toLocaleString("es-CO", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     })
+  }
+
+  // Obtener tamaño de fuente dinámico basado en la longitud del texto
+  const getFontSize = (text: string, isBigCard = false) => {
+    const length = text.length
+    if (isBigCard) {
+      if (length > 12) return "text-xl"
+      if (length > 10) return "text-2xl"
+      return "text-3xl"
+    }
+    if (length > 12) return "text-lg"
+    if (length > 10) return "text-xl"
+    if (length > 8) return "text-2xl"
+    return "text-3xl"
   }
 
   // Construir datos dinámicos con información de la API
@@ -171,9 +205,25 @@ export function SummaryCards() {
     if (template.key === "accountsReceivable") value = data.accountsReceivable;
     if (template.key === "overdueInvoices") value = data.overdueInvoices;
 
+    // Use real trend data if available, otherwise use a simulated trend that ends at the real value
+    const realTrend = (data as any)[template.trendKey as string]
+    let displayPoints = template.chartPoints
+    
+    if (realTrend && Array.isArray(realTrend) && realTrend.length > 0) {
+      displayPoints = realTrend
+    } else if (value > 0) {
+      // Simulate a "real" trend: 0 for previous months, then the value for the current month
+      // We create a line that stays at 0 and only rises at the end
+      displayPoints = [0, 0, 0, 0, 0, 0, value * 0.1, value]
+    } else {
+      // No movements = Flat line at zero
+      displayPoints = [0, 0, 0, 0, 0, 0, 0, 0]
+    }
+
     return {
       ...template,
-      amount: template.isCurrency ? formatCurrency(value) : String(value)
+      amount: template.isCurrency ? formatCurrency(value) : String(value),
+      chartPoints: displayPoints
     }
   })
 
@@ -206,9 +256,9 @@ export function SummaryCards() {
               <item.icon className={`h-4 w-4 ${item.color}`} />
             </div>
           </div>
-          <div className="flex items-baseline gap-1.5 mt-2">
+          <div className="flex items-baseline gap-1.5 mt-2 overflow-hidden">
             {item.isCurrency && <span className="text-[hsl(0,0%,55%)] text-sm font-sans">$</span>}
-            <span className="text-3xl font-extrabold text-[hsl(209,83%,23%)] font-sans tracking-tight">
+            <span className={`${getFontSize(item.amount)} font-extrabold text-[hsl(209,83%,23%)] font-sans tracking-tight transition-all duration-300`}>
               {item.amount}
             </span>
             {item.suffix && (
@@ -229,25 +279,27 @@ export function SummaryCards() {
       ))}
 
       {/* Payout Card */}
-      <div className="rounded-2xl border border-border bg-card p-5 flex flex-col justify-between min-h-[160px] hover:scale-95 transition-all shadow-xl">
-        <div className="flex items-center justify-between">
+      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 flex flex-col justify-between min-h-[160px] hover:scale-95 transition-all shadow-xl group">
+        <div className="relative z-10 flex items-center justify-between">
           <span className="text-black text-[10px] font-black font-sans uppercase tracking-widest">{payoutData.label}</span>
           <span className="text-[10px] text-muted-foreground font-sans bg-gray-100 px-2 py-0.5 rounded-full">{payoutData.expects}</span>
         </div>
 
-        <div className="flex items-center justify-between gap-2 mt-2">
-          <div className="flex flex-col">
-            <span className="text-3xl font-black text-[hsl(209,83%,23%)] font-sans tracking-tight">
+        <div className="relative z-10 flex flex-col gap-2 mt-2">
+          <div className="flex items-center justify-between">
+            <span className={`${getFontSize(payoutData.amount, true)} font-black text-[hsl(209,83%,23%)] font-sans tracking-tight transition-all duration-300 truncate mr-2`}>
               ${payoutData.amount}
             </span>
           </div>
-          <div className="w-24 h-24 bg-white rounded-2xl p-2 shadow-sm border border-gray-100 flex items-center justify-center shrink-0">
-            <img
-              src="/Logo-PlasticosLC.png"
-              alt="Logo Plásticos LC"
-              className="w-full h-full object-contain"
-            />
-          </div>
+        </div>
+
+        {/* Watermark Logo */}
+        <div className="absolute -bottom-4 -right-4 w-32 h-32 opacity-[0.07] grayscale pointer-events-none group-hover:scale-110 transition-transform duration-500">
+          <img
+            src="/Logo-PlasticosLC.png"
+            alt="Watermark"
+            className="w-full h-full object-contain"
+          />
         </div>
         {/* Payment methods */}
         <div className="flex hidden flex-wrap items-center gap-2 mt-1">

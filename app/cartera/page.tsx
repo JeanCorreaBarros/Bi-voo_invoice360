@@ -24,6 +24,7 @@ import {
     ShieldCheck
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
+import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 
 type TabType = "general" | "overdue" | "by-customer"
 
@@ -646,6 +647,7 @@ export default function CarteraPage() {
                     </div>
                 )}
             </AnimatePresence>
+            <MobileBottomNav />
         </div>
     )
 }

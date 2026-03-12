@@ -48,9 +48,9 @@ const SECTIONS = [
 // Bottom nav tabs (mobile only)
 const mainTabs = [
   { icon: FileText, label: "Facturas", href: "/" },
+  { icon: DollarSign, label: "Cartera", href: "/cartera" },
   { icon: ShoppingCart, label: "Compras", href: "/compras" },
   { icon: Users, label: "Clientes", href: "/clientes" },
-  { icon: FolderOpen, label: "Productos", href: "/productos" },
 ]
 
 /* ─────────────────────────────────────────────

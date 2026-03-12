@@ -5,9 +5,10 @@ import { motion } from "framer-motion"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Download, FileText, PieChart, BarChart3, TrendingUp, RefreshCw, FileSpreadsheet, Calendar } from "lucide-react"
+import { Download, FileText, PieChart, BarChart3, TrendingUp, RefreshCw, FileSpreadsheet, Calendar, Search, ChevronDown, ChevronUp, SlidersHorizontal } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import toast from "react-hot-toast"
 
 import { DashboardHeader } from "@/components/dashboard-header"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
@@ -55,6 +56,7 @@ function EstadisticasSkeleton() {
 }
 
 interface DescargarOpciones {
+  id?: number
   tipo: "PDF" | "Excel" | "ZIP"
   label: string
   labelShort?: string
@@ -70,20 +72,7 @@ interface Reporte {
   usarFechas?: boolean
 }
 
-const reportes: Reporte[] = [
-  {
-    id: 6,
-    nombre: "Ventas",
-    descripcion: "Listado completo de Ventas",
-    icon: FileText,
-    usarFechas: true,
-    descargas: [
-      { tipo: "PDF", label: "Descargar PDF", labelShort: "PDF", endpoint: "/reports-sales/export/pdf" },
-      { tipo: "Excel", label: "Descargar Excel", labelShort: "Excel", endpoint: "/reports-sales/export/excel" },
-      { tipo: "ZIP", label: "Descargar ZIP", labelShort: "ZIP", endpoint: "/reports-sales/export/zip" }
-    ]
-  },
-]
+const reportes: Reporte[] = [] // Se llenará desde la API
 
 interface Estadisticas {
   totalRegistros: number
@@ -93,49 +82,90 @@ interface Estadisticas {
 }
 
 const defaultEstadisticas: Estadisticas = {
-  totalRegistros: 12458,
-  verificados: 8234,
-  pendientes: 2124,
-  rechazados: 100,
+  totalRegistros: 0,
+  verificados: 0,
+  pendientes: 0,
+  rechazados: 0,
+}
+
+// Mapa de iconos para Lucide
+const IconMap: { [key: string]: any } = {
+  PieChart: PieChart,
+  BarChart3: BarChart3,
+  FileText: FileText,
+  TrendingUp: TrendingUp,
 }
 
 export default function ReportesPage() {
+  const [reportesList, setReportesList] = useState<Reporte[]>([])
   const [estadisticas, setEstadisticas] = useState<Estadisticas>(defaultEstadisticas)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  
+  const [globalTexto, setGlobalTexto] = useState("")
+  const [showFilters, setShowFilters] = useState(false)
+
   // Estados para las fechas
   const [fechaDesde, setFechaDesde] = useState<string>(() => {
     const hoy = new Date()
     const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
     return primerDiaMes.toISOString().split('T')[0]
   })
-  
+
   const [fechaHasta, setFechaHasta] = useState<string>(() => {
     const hoy = new Date()
     return hoy.toISOString().split('T')[0]
   })
 
-  useEffect(() => {
-    const fetchEstadisticas = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        // Descomenta cuando el endpoint esté listo
-        // const data = await reportesApi.getResumen()
-        // setEstadisticas(data)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar estadísticas')
-        setEstadisticas(defaultEstadisticas)
-      } finally {
-        setLoading(false)
-      }
-    }
+  const fetchReportes = async (isRefreshing = false) => {
+    try {
+      setLoading(true)
+      setError(null)
+      if (isRefreshing) setReportesList([]) // Trigger skeleton
 
-    fetchEstadisticas()
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        setError("No autorizado. Por favor inicia sesión nuevamente.")
+        return
+      }
+
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api"
+      const response = await fetch(`${apiBaseUrl}/reports`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Error al cargar reportes: ${response.status} ${response.statusText}`)
+      }
+
+      const json = await response.json()
+      if (json.ok && Array.isArray(json.data)) {
+        const mappedData = json.data.map((item: any) => ({
+          ...item,
+          icon: IconMap[item.icon] || FileText,
+          usarFechas: item.nombre.toLowerCase().includes("registro") || item.nombre.toLowerCase().includes("ventas") || item.nombre.toLowerCase().includes("resumen")
+        }))
+        setReportesList(mappedData)
+        if (isRefreshing) toast.success("Reportes actualizados")
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error al cargar reportes'
+      setError(errorMsg)
+      toast.error(errorMsg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchReportes()
   }, [])
 
   const handleDescargar = async (reporteId: number, tipo: string, endpoint?: string, usarFechas?: boolean) => {
+    // ... existing handleDescargar code ...
     try {
       setLoading(true)
       setError(null)
@@ -158,7 +188,7 @@ export default function ReportesPage() {
           setError("Por favor selecciona ambas fechas")
           return
         }
-        
+
         if (new Date(fechaDesde) > new Date(fechaHasta)) {
           setError("La fecha inicial no puede ser mayor a la fecha final")
           return
@@ -166,14 +196,25 @@ export default function ReportesPage() {
       }
 
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api"
-      
-      // Construir la URL con los parámetros de fecha si aplica
+
+      // Construir la URL con los parámetros
       let fullUrl = `${apiBaseUrl}${endpoint}`
+      const params = new URLSearchParams()
+
       if (usarFechas) {
-        fullUrl += `?from=${fechaDesde}&to=${fechaHasta}`
+        params.append("from", fechaDesde)
+        params.append("to", fechaHasta)
       }
 
-      console.log(`Consumiendo endpoint: ${fullUrl}`)
+      if (globalTexto && globalTexto.trim()) {
+        params.append("texto", globalTexto.trim())
+      }
+
+      const queryString = params.toString()
+      if (queryString) {
+        const separator = fullUrl.includes('?') ? '&' : '?'
+        fullUrl += `${separator}${queryString}`
+      }
 
       const response = await fetch(fullUrl, {
         method: "GET",
@@ -193,9 +234,10 @@ export default function ReportesPage() {
       a.href = url
 
       let fileExtension = 'bin'
-      if (tipo === "PDF") fileExtension = 'pdf'
-      else if (tipo === "Excel") fileExtension = 'xlsx'
-      else if (tipo === "ZIP") fileExtension = 'zip'
+      const tipoLower = tipo.toLowerCase()
+      if (tipoLower.includes("pdf")) fileExtension = 'pdf'
+      else if (tipoLower.includes("excel")) fileExtension = 'xlsx'
+      else if (tipoLower.includes("zip")) fileExtension = 'zip'
 
       const fileName = `reporte_${reporteId}_${new Date().toLocaleDateString("es-ES").replace(/\//g, "-")}.${fileExtension}`
 
@@ -205,10 +247,11 @@ export default function ReportesPage() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
 
-      console.log(`Reporte descargado: ${fileName}`)
-
+      toast.success(`${tipo} descargado correctamente`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Error al descargar ${tipo}`)
+      const errorMsg = err instanceof Error ? err.message : `Error al descargar ${tipo}`
+      setError(errorMsg)
+      toast.error(errorMsg)
       console.error("Error al descargar:", err)
     } finally {
       setLoading(false)
@@ -216,153 +259,223 @@ export default function ReportesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-20 md:pb-6">
+    <div className="min-h-screen bg-[#F8FAFC] pb-20 md:pb-6">
       <DashboardHeader />
 
-      <div className="p-4 md:p-6">
-        {/* Header Section - Optimizado para mobile */}
-        <div className="mb-4 md:mb-6">
-          <div className="flex flex-col gap-3 mb-4">
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold text-foreground">Reportes</h2>
-              <p className="text-sm text-muted-foreground mt-1">Descarga reportes y estadísticas</p>
+      <div className="max-w-7xl mx-auto p-4 md:p-6 lg:p-8">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">Reportes</h1>
+            <p className="text-slate-500 mt-1">Gestión y descarga de documentos analíticos</p>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchReportes(true)}
+            disabled={loading}
+            className="bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-sm transition-all gap-2 h-10 px-4"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-blue-500" : ""}`} />
+            <span className="font-medium">{loading ? "Actualizando..." : "Actualizar datos"}</span>
+          </Button>
+        </div>
+
+        {/* Filtro de Fechas - Acordeón elegante */}
+        <div className="mb-6 overflow-hidden bg-white border border-slate-200 rounded-xl shadow-sm transition-all duration-300">
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${showFilters ? 'bg-blue-100' : 'bg-slate-100'}`}>
+                <SlidersHorizontal className={`h-4 w-4 transition-colors ${showFilters ? 'text-blue-600' : 'text-slate-500'}`} />
+              </div>
+              <div className="text-left">
+                <span className="text-sm font-semibold text-slate-700 block">Rango de consulta</span>
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tighter">
+                  {showFilters ? 'Haz clic para ocultar filtros' : 'Haz clic para expandir filtros y búsqueda'}
+                </span>
+              </div>
             </div>
             
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                setLoading(true)
-                try {
-                  await new Promise((resolve) => setTimeout(resolve, 1000))
-                  setEstadisticas(defaultEstadisticas)
-                  console.log("Estadísticas actualizadas")
-                } catch (err) {
-                  setError("Error al actualizar estadísticas")
-                } finally {
-                  setLoading(false)
-                }
-              }}
-              disabled={loading}
-              className="gap-2 w-full md:w-auto"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-              <span>{loading ? "Actualizando..." : "Actualizar"}</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Filtro de Fechas - MINIMALISTA */}
-        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <Calendar className="h-4 w-4 text-gray-600" />
-            <span className="text-xs font-medium text-gray-700">Periodo</span>
-          </div>
+            <div className="flex items-center gap-3">
+              {/* Resumen rápido de filtros activos cuando está cerrado */}
+              {!showFilters && (
+                <div className="hidden md:flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                   <div className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-600">
+                     <Calendar className="w-2.5 h-2.5" />
+                     {new Date(fechaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} - {new Date(fechaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                   </div>
+                   {globalTexto && (
+                     <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 rounded text-[10px] font-bold text-blue-600">
+                       <Search className="w-2.5 h-2.5" />
+                       {globalTexto.length > 15 ? `${globalTexto.substring(0, 15)}...` : globalTexto}
+                     </div>
+                   )}
+                </div>
+              )}
+              {showFilters ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400 group-hover:text-blue-500 transition-colors" />}
+            </div>
+          </button>
           
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              className="bg-white h-9 text-xs"
-            />
-            <Input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              className="bg-white h-9 text-xs"
-            />
-          </div>
+          <motion.div
+            initial={false}
+            animate={{ 
+              height: showFilters ? "auto" : 0,
+              opacity: showFilters ? 1 : 0
+            }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="overflow-hidden"
+          >
+            <div className="p-4 pt-0 border-t border-slate-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="desde" className="text-[10px] uppercase tracking-wider text-slate-400 font-bold ml-1">Fecha Inicio</Label>
+                  <Input
+                    id="desde"
+                    type="date"
+                    value={fechaDesde}
+                    onChange={(e) => setFechaDesde(e.target.value)}
+                    className="bg-slate-50/50 border-slate-200 focus:bg-white transition-colors h-10"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="hasta" className="text-[10px] uppercase tracking-wider text-slate-400 font-bold ml-1">Fecha Fin</Label>
+                  <Input
+                    id="hasta"
+                    type="date"
+                    value={fechaHasta}
+                    onChange={(e) => setFechaHasta(e.target.value)}
+                    className="bg-slate-50/50 border-slate-200 focus:bg-white transition-colors h-10"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="texto-global" className="text-[10px] uppercase tracking-wider text-slate-400 font-bold ml-1">Texto de búsqueda / Filtro General</Label>
+                  <div className="relative">
+                    <Input
+                      id="texto-global"
+                      type="text"
+                      placeholder="Escribe aquí "
+                      value={globalTexto}
+                      onChange={(e) => setGlobalTexto(e.target.value)}
+                      className="bg-slate-50/50 border-slate-200 focus:bg-white transition-colors h-10 pr-10"
+                    />
+                    {globalTexto && (
+                      <button
+                        onClick={() => setGlobalTexto("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         </div>
 
-        {/* Error Message - Optimizado para mobile */}
+        {/* Error Message */}
         {error && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border border-red-200 text-red-800 p-3 md:p-4 rounded-lg mb-4 md:mb-6 text-sm"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-rose-50 border border-rose-100 text-rose-800 p-4 rounded-xl mb-6 flex items-center gap-3"
           >
-            <p className="font-medium">⚠️ Error</p>
-            <p className="mt-1">{error}</p>
+            <div className="shrink-0 w-8 h-8 rounded-full bg-rose-200 flex items-center justify-center text-rose-700">
+              <span className="font-bold">!</span>
+            </div>
+            <div className="text-sm">
+              <p className="font-bold text-rose-900">Error detectado</p>
+              <p className="opacity-80">{error}</p>
+            </div>
           </motion.div>
         )}
 
-        {/* Reportes List - Optimizado para mobile */}
+        {/* Reportes Grid */}
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4"
+          layout
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
         >
-          {loading ? (
-            <>
-              <ReportCardSkeleton />
-              <ReportCardSkeleton />
-            </>
+          {loading && reportesList.length === 0 ? (
+            Array.from({ length: 4 }).map((_, i) => <ReportCardSkeleton key={i} />)
           ) : (
-            reportes.map((reporte, index) => (
+            reportesList.map((reporte, index) => (
               <motion.div
                 key={reporte.id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+                transition={{ delay: index * 0.05 }}
               >
-                <Card className="border-border hover:shadow-lg transition-all duration-200">
-                  <CardContent className="p-4">
-                    {/* Header del Reporte */}
-                    <div className="flex items-start gap-3 mb-3">
-                      <div className="w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shrink-0 shadow-md">
-                        <reporte.icon className="w-6 h-6 md:w-7 md:h-7 text-white" />
+                <Card className="group overflow-hidden border-slate-200 hover:border-blue-200 hover:shadow-md transition-all duration-300 h-full bg-white">
+                  <CardContent className="p-0 flex flex-col h-full">
+                    {/* Upper Section */}
+                    <div className="p-4 flex items-start gap-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-slate-50 flex items-center justify-center shrink-0 border border-slate-100 transition-colors group-hover:bg-blue-50 group-hover:border-blue-100">
+                        <reporte.icon className="w-5 h-5 md:w-6 md:h-6 text-slate-600 transition-colors group-hover:text-blue-600" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-foreground text-base md:text-lg leading-tight">
+                      <div className="flex-1 min-w-0 pr-4">
+                        <h3 className="font-bold text-slate-900 text-base leading-tight group-hover:text-blue-700 transition-colors">
                           {reporte.nombre}
                         </h3>
-                        <p className="text-xs md:text-sm text-muted-foreground mt-1 line-clamp-2">
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-1 italic">
                           {reporte.descripcion}
                         </p>
                       </div>
                     </div>
-                    
-                    {/* Indicador de Rango de Fechas - Compacto */}
-                    {reporte.usarFechas && (
-                      <div className="mb-3 px-2 py-1.5 bg-blue-50 rounded border border-blue-200 flex items-center gap-1.5">
-                        <Calendar className="w-3 h-3 text-blue-600 shrink-0" />
-                        <p className="text-xs text-blue-700 truncate">
-                          {new Date(fechaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} - {new Date(fechaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                        </p>
-                      </div>
-                    )}
 
-                    {/* Botones de Descarga - Grid en Mobile */}
-                    <div className="grid grid-cols-3 gap-2">
-                      {reporte.descargas.map((descarga, idx) => (
-                        <Button
-                          key={idx}
-                          size="sm"
-                          className={`gap-1.5 text-white shadow-sm transition-all hover:scale-105 h-auto py-2.5 ${
-                            descarga.tipo === "PDF"
-                              ? "bg-red-600 hover:bg-red-700 active:bg-red-800"
-                              : descarga.tipo === "Excel"
-                              ? "bg-green-600 hover:bg-green-700 active:bg-green-800"
-                              : "bg-violet-600 hover:bg-violet-700 active:bg-violet-800"
-                          }`}
-                          onClick={() => handleDescargar(reporte.id, descarga.tipo, descarga.endpoint, reporte.usarFechas)}
-                          disabled={loading}
-                        >
-                          <div className="flex flex-col items-center gap-1 w-full">
-                            {descarga.tipo === "PDF" ? (
-                              <Download className="w-4 h-4" />
-                            ) : descarga.tipo === "Excel" ? (
-                              <FileSpreadsheet className="w-4 h-4" />
-                            ) : (
-                              <Download className="w-4 h-4" />
-                            )}
-                            <span className="text-xs font-semibold leading-none">
-                              {descarga.labelShort || descarga.tipo}
+                    {/* Actions Section */}
+                    <div className="mt-auto p-4 bg-slate-50/30 border-t border-slate-100 space-y-3">
+                      {/* Period and Search Badges */}
+                      <div className="flex flex-wrap gap-2">
+                        {reporte.usarFechas && (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-white rounded-md border border-slate-200 shadow-sm w-fit">
+                            <Calendar className="w-3 h-3 text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-tighter">
+                              {new Date(fechaDesde).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} a {new Date(fechaHasta).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                             </span>
                           </div>
-                        </Button>
-                      ))}
+                        )}
+
+                        {globalTexto && globalTexto.trim() && (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-blue-50/50 rounded-md border border-blue-100 shadow-sm w-fit animate-in fade-in zoom-in duration-300">
+                            <Search className="w-3 h-3 text-blue-400" />
+                            <span className="text-[10px] font-bold text-blue-700 uppercase tracking-tighter max-w-[120px] truncate">
+                              "{globalTexto.trim()}"
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Compact Download Buttons */}
+                      <div className="flex flex-wrap gap-2">
+                        {reporte.descargas.map((descarga, idx) => (
+                          <Button
+                            key={descarga.id || idx}
+                            size="sm"
+                            variant="secondary"
+                            className={`flex items-center gap-2 h-8 px-3 rounded-lg border shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] ${descarga.tipo === "PDF"
+                              ? "bg-white border-rose-100 text-rose-600 hover:bg-rose-50 hover:border-rose-200"
+                              : descarga.tipo === "Excel"
+                                ? "bg-white border-emerald-100 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-200"
+                                : "bg-white border-violet-100 text-violet-600 hover:bg-violet-50 hover:border-violet-200"
+                              }`}
+                            onClick={() => handleDescargar(reporte.id, descarga.tipo, descarga.endpoint, reporte.usarFechas)}
+                            disabled={loading}
+                          >
+                            {descarga.tipo === "PDF" ? (
+                              <Download className="w-3 h-3" />
+                            ) : descarga.tipo === "Excel" ? (
+                              <FileSpreadsheet className="w-3 h-3" />
+                            ) : (
+                              <Download className="w-3 h-3" />
+                            )}
+                            <span className="text-[11px] font-bold uppercase">{descarga.tipo}</span>
+                          </Button>
+                        ))}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -371,61 +484,25 @@ export default function ReportesPage() {
           )}
         </motion.div>
 
-        {/* Estadísticas - Hidden como en el original */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="hidden grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6"
-        >
-          {[
-            { label: "Total Registros", value: estadisticas.totalRegistros, color: "bg-blue-50" },
-            { label: "Verificados", value: estadisticas.verificados, color: "bg-green-50" },
-            { label: "Pendientes", value: estadisticas.pendientes, color: "bg-yellow-50" },
-            { label: "Rechazados", value: estadisticas.rechazados, color: "bg-red-50" },
-          ].map((stat, index) => (
-            <Card key={index} className={`border-border ${stat.color}`}>
-              <CardContent className="p-3 md:p-5">
-                <p className="text-xs md:text-sm text-muted-foreground">{stat.label}</p>
-                <p className="text-xl md:text-2xl font-bold text-foreground mt-1 md:mt-2">{stat.value}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </motion.div>
-
-        {/* Estadísticas Rápidas - Hidden como en el original */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="mt-6 md:mt-8 hidden"
-        >
-          <Card className="border-border">
-            <CardHeader>
-              <CardTitle className="text-foreground text-base md:text-lg">Estadísticas Rápidas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                {loading ? (
-                  <EstadisticasSkeleton />
-                ) : (
-                  [
-                    { label: "Total Registros", value: estadisticas.totalRegistros.toLocaleString(), color: "text-primary" },
-                    { label: "Verificados", value: estadisticas.verificados.toLocaleString(), color: "text-accent" },
-                    { label: "Pendientes", value: estadisticas.pendientes.toLocaleString(), color: "text-chart-3" },
-                    { label: "Rechazados", value: estadisticas.rechazados.toLocaleString(), color: "text-destructive" },
-                  ].map((stat, index) => (
-                    <div key={index} className="text-center p-3 md:p-4 rounded-lg bg-muted/50">
-                      <p className={`text-xl md:text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-                      <p className="text-xs md:text-sm text-muted-foreground mt-1">{stat.label}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
+        {/* Empty state */}
+        {!loading && reportesList.length === 0 && (
+          <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300">
+            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileText className="w-8 h-8 text-slate-300" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Sin reportes</h3>
+            <p className="text-slate-500 mt-1">No se encontraron documentos disponibles en el servidor.</p>
+            <Button
+              variant="outline"
+              className="mt-6"
+              onClick={() => fetchReportes(true)}
+            >
+              Intentar de nuevo
+            </Button>
+          </div>
+        )}
       </div>
-       <MobileBottomNav />
+      <MobileBottomNav />
     </div>
   )
 }
