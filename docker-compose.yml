@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: plasticoslc-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: plasticoslc
+      POSTGRES_PASSWORD: plasticoslc
+      POSTGRES_DB: plasticoslc
+    ports:
+      - "5433:5432"
+    volumes:
+      - plasticoslc-db-data:/var/lib/postgresql/data
+
+volumes:
+  plasticoslc-db-data:

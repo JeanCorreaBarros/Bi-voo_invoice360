@@ -10,3 +10,9 @@ node_modules/
 .next/
 .env*.local
 .DS_Store
+
+# Backend (apps/api)
+apps/api/.env
+apps/api/generated/prisma
+apps/api/uploads/*
+!apps/api/uploads/company/logo.png
