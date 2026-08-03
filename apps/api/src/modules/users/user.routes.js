@@ -8,7 +8,7 @@ import { hasPermission } from '../../middlewares/permission.middleware.js'
 
 const router = Router()
 
-router.use(auth)
+router.use(auth, requireTenant)
 
 router.get(
   '/',

@@ -1,0 +1,895 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/tenant"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================
+// PLANTILLA DE BD POR EMPRESA (TENANT)
+//
+// Este schema se migra a UNA base de datos física por empresa
+// (ver apps/api/src/lib/db.js -> provisionTenantDatabase).
+// La BD misma es el límite del tenant: no hay columna companyId
+// en ningún modelo, no hace falta filtrar por empresa en ninguna
+// query.
+// =====================================================
+
+model User {
+  id       String  @id @default(uuid())
+  name     String
+  email    String  @unique
+  password String
+  active   Boolean @default(true)
+  avatar   String?
+
+  roles  UserRole[]
+  audits AuditLog[]
+
+  invoicesCreated Invoice[]
+  invoicesSold    Invoice[] @relation("InvoiceSeller")
+
+  inventoryMovements InventoryMovement[] // movimientos de inventario hechos por el usuario
+
+  payments Payment[] // pagos registrados por el usuario
+
+  cashMovements CashMovement[] // movimientos de caja
+
+  creditNotes CreditNote[] // notas crédito creadas
+
+  priceChanges ProductPriceHistory[] // cambios de precio realizados
+
+  journalEntries JournalEntry[] // comprobantes contables creados
+  purchasePayments PurchasePayment[] // pagos a proveedores registrados
+  stockTransfers StockTransfer[] // transferencias de inventario registradas
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Role {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id          String  @id @default(uuid())
+  code        String  @unique
+  description String?
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+model AuditLog {
+  id       String  @id @default(uuid())
+  userId   String
+  action   String
+  module   String
+  entityId String?
+  before   Json?
+  after    Json?
+  ip       String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum ProductType {
+  PRODUCT
+  SERVICE
+  RAW_MATERIAL
+  FINISHED_PRODUCT
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  sku         String      @unique
+  barcode     String?
+  type        ProductType @default(PRODUCT)
+  description String?
+  category    String?
+  brand       String?
+  unit        String?     @default("UND")
+  price       Float
+  cost        Float?       @default(0)
+  stock       Int         @default(0)
+  minStock    Int         @default(0)
+  maxStock    Int?
+  active      Boolean     @default(true)
+
+  movements       InventoryMovement[]
+  invoicesDetails InvoiceDetail[]
+  purchaseDetails PurchaseDetail[]
+  priceHistory    ProductPriceHistory[]
+  stockTransfers  StockTransfer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model InventoryMovement {
+  id        String        @id @default(cuid())
+  productId String
+  type      InventoryType
+  quantity  Int
+
+  reference   String? // INVOICE, PURCHASE, TRANSFORM, TRANSFER
+  referenceId Int? // id del documento
+
+  reason String?
+
+  product Product @relation(fields: [productId], references: [id])
+
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  // =========================
+  // AUDITORÍA
+  // =========================
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum InventoryType {
+  IN
+  OUT
+  ADJUST
+  PURCHASE
+  SALE
+  RETURN
+  TRANSFORM_IN
+  TRANSFORM_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+}
+
+// Bodegas/sucursales físicas donde se guarda inventario. Toda empresa nueva
+// recibe una bodega "isDefault" automáticamente; las compras, ventas y
+// ajustes que no especifican bodega usan esa por defecto.
+model Warehouse {
+  id        String  @id @default(cuid())
+  name      String
+  code      String? @unique
+  address   String?
+  isDefault Boolean @default(false)
+  active    Boolean @default(true)
+
+  movements     InventoryMovement[]
+  transfersFrom StockTransfer[]     @relation("TransferFrom")
+  transfersTo   StockTransfer[]     @relation("TransferTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Registro de una transferencia de stock entre dos bodegas. No cambia el
+// stock total de la empresa (Product.stock): solo mueve cantidades entre
+// bodegas, reflejado como dos InventoryMovement (TRANSFER_OUT/TRANSFER_IN).
+model StockTransfer {
+  id Int @id @default(autoincrement())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  fromWarehouseId String
+  fromWarehouse   Warehouse @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+
+  toWarehouseId String
+  toWarehouse   Warehouse @relation("TransferTo", fields: [toWarehouseId], references: [id])
+
+  quantity Int
+  reason   String?
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum InvoiceStatus {
+  DRAFT // Borrador
+  SENT // enviada a cliente pendiente de pago
+  PENDING // Emitida pendiente de pago
+  PARTIAL // Pago parcial
+  PAID // Pagada
+  CANCELLED // Anulada
+  OVERDUE // Vencida
+}
+
+enum DianStatus {
+  NOT_SENT
+  PENDING
+  ACCEPTED
+  REJECTED
+  ERROR
+}
+
+model Invoice {
+  status InvoiceStatus @default(PENDING)
+
+  moduleId               String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  autoretencion          Decimal? @default(0.00000) @db.Decimal(10, 5)
+  ciiu                   Int?
+  cufe                   String?  @default("") @db.VarChar(100)
+  note                   String?
+  orderAmountPaid        Decimal  @db.Decimal(10, 2)
+  orderDate              DateTime @default(now()) @db.Timestamp(0)
+  orderId                Int
+  orderPrefix            String   @db.VarChar(50)
+  orderReceiverAddress   String
+  orderReceiverName      String   @db.VarChar(250)
+  orderReceiverNit       String   @db.VarChar(50)
+  orderReceiverPhone     String   @default("") @db.VarChar(50)
+  orderReceiverEmail     String?  @db.VarChar(250)
+  orderResolution        String?  @db.VarChar(50)
+  orderSubtotalBeforeTax Decimal  @default(0.00) @db.Decimal(10, 2)
+  orderTaxPer            String   @default("19") @db.VarChar(250)
+  orderTotalAfterTax     Decimal  @db.Decimal(14, 2)
+  orderTotalAmountDue    Decimal? @db.Decimal(10, 2)
+  orderTotalBeforeTax    Decimal  @db.Decimal(10, 2)
+  orderTotalDesc         Decimal  @default(0.00) @db.Decimal(10, 2)
+  orderTotalTax          Decimal  @db.Decimal(10, 2)
+  paymentForms           Int?     @default(0)
+  paymentMethods         Int?     @default(0)
+  plazoPago              String?  @default("0") @db.VarChar(50)
+  reteica                Decimal? @default(0.00000) @db.Decimal(10, 5)
+  reteiva                Decimal? @default(0.00000) @db.Decimal(10, 5)
+  retencion              String?  @default("RTE00") @db.VarChar(50)
+  userId                 String
+  vencimiento            String?  @default("0") @db.VarChar(50)
+
+  dueDate DateTime? @db.Timestamp(0)
+  paidAt  DateTime? @db.Timestamp(0)
+
+  id      Int             @id @default(autoincrement())
+  details InvoiceDetail[]
+
+  dianStatus String? @default("NOT_SENT") @db.VarChar(20)
+
+  sellerId String?
+  seller   User?   @relation("InvoiceSeller", fields: [sellerId], references: [id])
+
+  user User @relation(fields: [userId], references: [id])
+
+  payments Payment[]
+
+  creditNotes CreditNote[]
+
+  @@unique([orderPrefix, orderId])
+  @@map("invoices")
+}
+
+model InvoiceDetail {
+  id                   Int       @id @default(autoincrement()) @map("order_item_id")
+  invoiceId            Int       @map("order_id")
+  orderPrefix          String    @default("") @db.VarChar(50)
+  orderResolution      String?   @db.VarChar(50)
+  productId            String?
+  product              Product?  @relation(fields: [productId], references: [id])
+  itemCode             String?   @db.VarChar(500)
+  reference            String?   @db.VarChar(500)
+  itemName             String?
+  descripcion          String?
+  orderItemQuantity    Decimal?  @db.Decimal(10, 2)
+  orderItemPrice       Decimal?  @db.Decimal(10, 2)
+  orderItemIva         Decimal?  @db.Decimal(10, 2)
+  orderItemDesc        Decimal?  @db.Decimal(10, 2)
+  orderItemFinalAmount Decimal?  @db.Decimal(10, 2)
+  createdAt            DateTime? @default(now()) @map("created_at")
+  updatedAt            DateTime? @updatedAt @map("updated_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id])
+
+  @@map("invoices_details")
+}
+
+model Resolution {
+  id            Int      @id @default(autoincrement())
+  prefix        String   @unique @db.VarChar(10)
+  currentNumber Int      @default(0)
+  fromNumber    Int
+  toNumber      Int
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  @@map("resolutions")
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ACTIVE
+  CANCELLED
+}
+
+model Purchase {
+  id            Int      @id @default(autoincrement())
+  supplierName  String
+  supplierNit   String?
+  invoiceNumber String?
+  date          DateTime @default(now())
+
+  subtotal Decimal @db.Decimal(14, 2)
+  tax      Decimal @db.Decimal(14, 2)
+  total    Decimal @db.Decimal(14, 2)
+
+  status PurchaseStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+
+  details  PurchaseDetail[]
+  payments PurchasePayment[]
+}
+
+model PurchaseDetail {
+  id         Int     @id @default(autoincrement())
+  purchaseId Int
+  productId  String
+  quantity   Decimal @db.Decimal(14, 2)
+  cost       Decimal @db.Decimal(14, 2)
+  total      Decimal @db.Decimal(14, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id])
+  product  Product  @relation(fields: [productId], references: [id])
+}
+
+model Supplier {
+  id      String  @id @default(cuid())
+  name    String
+  nit     String? @unique
+  email   String?
+  phone   String?
+  address String?
+  active  Boolean @default(true)
+
+  journalEntryLines JournalEntryLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Customer {
+  id      String  @id @default(cuid())
+  name    String
+  nit     String? @unique
+  email   String?
+  phone   String?
+  address String?
+  active  Boolean @default(true)
+
+  journalEntryLines JournalEntryLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =====================================================
+// Datos legales/fiscales/branding de LA empresa dueña de
+// esta BD. Fila única (singleton) - se crea al provisionar
+// el tenant.
+// =====================================================
+
+model CompanyProfile {
+  id Int @id @default(autoincrement())
+
+  // Información legal
+  businessName        String // Razón social
+  tradeName           String? // Nombre comercial
+  nit                 String
+  dv                  String? // Dígito verificación
+  legalRepresentative String?
+  legalRepId          String? // Cédula representante
+
+  // Información fiscal
+  taxRegime         String? // Régimen (Simplificado, Responsable IVA, etc)
+  taxResponsibility String? // R-99-PN, R-99-PJ
+
+  // Contacto
+  email      String?
+  phone      String?
+  address    String?
+  city       String?
+  department String?
+  country    String? @default("Colombia")
+
+  // Branding
+  logo         String?
+  primaryColor String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum PaymentMethod {
+  CASH // efectivo
+  TRANSFER // transferencia bancaria
+  CARD // tarjeta
+  NEQUI // billetera digital
+  DAVIPLATA // billetera digital
+  OTHER // otros métodos
+}
+
+// ===================================================
+// Registro de pagos realizados a una factura
+// Permite pagos parciales y control de cartera
+// ===================================================
+
+model Payment {
+  // ID único del pago
+  id String @id @default(cuid())
+
+  invoiceId Int
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  amount Decimal @db.Decimal(14, 2) // valor pagado
+
+  method PaymentMethod // método de pago
+
+  reference String? // referencia bancaria o comprobante
+
+  note String? // observaciones del pago
+
+  // =========================
+  // AUDITORÍA
+  // =========================
+
+  createdBy String? // usuario que registró el pago
+  user      User?   @relation(fields: [createdBy], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum CashMovementType {
+  OPEN // apertura de caja
+  IN // ingreso dinero
+  OUT // salida dinero
+  CLOSE // cierre de caja
+}
+
+model CashMovement {
+  id String @id @default(cuid())
+
+  type CashMovementType
+
+  amount Decimal @db.Decimal(14, 2)
+
+  reference String? // referencia del movimiento
+  note      String?
+
+  // usuario que hizo el movimiento
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model CreditNote {
+  id Int @id @default(autoincrement())
+
+  invoiceId Int
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  reason String // motivo de la nota
+
+  amount Decimal @db.Decimal(14, 2)
+
+  // usuario que creó la nota
+  createdBy String?
+  user      User?   @relation(fields: [createdBy], references: [id])
+
+  details CreditNoteDetail[]
+
+  createdAt DateTime @default(now())
+}
+
+model CreditNoteDetail {
+  id Int @id @default(autoincrement())
+
+  creditNoteId Int
+  creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
+
+  productId String
+  quantity  Float
+  price     Float
+}
+
+model ProductPriceHistory {
+  id String @id @default(cuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  oldPrice Float
+  newPrice Float
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// =====================================================
+// MÓDULO DE CONTABILIDAD (Fase 1: base funcional)
+//
+// Plan de cuentas, comprobantes y centros de costo son
+// propios de cada empresa (misma BD del tenant). Los
+// "terceros" de un comprobante reutilizan Customer/Supplier
+// ya existentes; para terceros que no son ni cliente ni
+// proveedor (empleados, otros) se permite un tercero libre
+// (nombre/NIT en texto).
+// =====================================================
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+  COST
+}
+
+enum AccountNature {
+  DEBIT
+  CREDIT
+}
+
+model Account {
+  id   String @id @default(cuid())
+  code String @unique // "1", "11", "1105", "110505"
+  name String
+
+  type   AccountType
+  nature AccountNature
+  level  Int // 1 clase, 2 grupo, 3 cuenta, 4 subcuenta
+
+  parentId String?
+  parent   Account?  @relation("AccountChildren", fields: [parentId], references: [id])
+  children Account[] @relation("AccountChildren")
+
+  allowsEntries Boolean @default(true) // false en clases/grupos que solo agrupan
+  active        Boolean @default(true)
+
+  lines   JournalEntryLine[]
+  budgets Budget[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CostCenter {
+  id     String  @id @default(cuid())
+  code   String  @unique
+  name   String
+  active Boolean @default(true)
+
+  lines JournalEntryLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum JournalEntryType {
+  DIARIO
+  INGRESO
+  EGRESO
+  AJUSTE
+}
+
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+  VOID
+}
+
+enum JournalEntrySource {
+  MANUAL
+  INVOICE
+  PURCHASE
+  PAYMENT
+  PURCHASE_PAYMENT
+  DEPRECIATION
+  CLOSING
+}
+
+model JournalEntry {
+  id          Int      @id @default(autoincrement())
+  number      Int
+  type        JournalEntryType
+  date        DateTime @default(now())
+  description String?
+
+  status JournalEntryStatus @default(POSTED)
+
+  // Referencia libre (sin FK) al documento de origen, para no acoplar
+  // este módulo con facturación/compras/pagos.
+  source   JournalEntrySource @default(MANUAL)
+  sourceId String?
+
+  createdBy String?
+  user      User?   @relation(fields: [createdBy], references: [id])
+
+  lines        JournalEntryLine[]
+  periodCloses AccountingPeriodClose[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([type, number])
+}
+
+model JournalEntryLine {
+  id             Int          @id @default(autoincrement())
+  journalEntryId Int
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id])
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  // Tercero: cliente o proveedor ya existentes, o uno "libre" (texto) para
+  // casos que no son ni cliente ni proveedor (empleados, otros).
+  customerId          String?
+  customer            Customer? @relation(fields: [customerId], references: [id])
+  supplierId          String?
+  supplier            Supplier? @relation(fields: [supplierId], references: [id])
+  otherThirdPartyName String?
+  otherThirdPartyNit  String?
+
+  debit  Decimal @default(0) @db.Decimal(14, 2)
+  credit Decimal @default(0) @db.Decimal(14, 2)
+
+  description String?
+}
+
+// =====================================================
+// Integración de IA (fase 1: solo guarda credenciales de
+// forma segura; sin automatización todavía).
+// =====================================================
+
+enum AIProvider {
+  OPENAI
+  ANTHROPIC
+  OTHER
+}
+
+model AIIntegrationSettings {
+  id Int @id @default(autoincrement())
+
+  provider AIProvider?
+  model    String?
+  temperature Float? @default(0.7)
+
+  // Cifrado con AES-256-GCM (ver apps/api/src/lib/crypto.js). Nunca se
+  // expone en texto plano por ningún endpoint.
+  apiKeyCiphertext String?
+  apiKeyIv         String?
+  apiKeyAuthTag    String?
+
+  active Boolean @default(false)
+
+  // Ids de eventos de automatización activados (catálogo estático definido
+  // en el frontend/backend, no en BD). Ej: "fact_causacion_automatica".
+  enabledEvents String[] @default([])
+
+  // Prompt de sistema usado por el chat y las automatizaciones de IA.
+  systemPrompt String? @db.Text
+
+  // Prompt override por evento del catálogo estático. Mapa eventId -> texto.
+  eventPrompts Json @default("{}")
+
+  // Controla si la burbuja de chat flotante se muestra en la app. La IA
+  // (eventos, chat) sigue funcionando igual esté o no visible el chat.
+  chatEnabled Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+}
+
+// =====================================================
+// Parametrización contable: cuenta por defecto para cada
+// lado de la causación automática (Factura/Compra/Pago).
+// Fila única, sembrada con los códigos del PUC estándar al
+// provisionar la empresa (ver seed/accountingSettings.js).
+// Sin FK real a Account (solo el id como texto): si la cuenta
+// se borra, la causación simplemente falla con mensaje claro
+// en vez de romper la integridad referencial del PUC.
+// =====================================================
+
+model AccountingSettings {
+  id Int @id @default(autoincrement())
+
+  salesAccountId              String? // Ingresos por ventas (crédito)
+  salesTaxAccountId           String? // IVA por pagar (crédito en venta, débito en compra)
+  accountsReceivableAccountId String? // Clientes / cartera (débito en venta)
+  inventoryAccountId          String? // Inventario de mercancías (débito en compra, crédito en costo de venta)
+  costOfSalesAccountId        String? // Costo de mercancía vendida (débito en costo de venta)
+  accountsPayableAccountId    String? // Proveedores (crédito en compra)
+  cashAccountId                String? // Caja (débito en pago en efectivo)
+  bankAccountId                String? // Bancos (débito en pago no efectivo)
+  depreciationExpenseAccountId String? // Gasto por depreciación (débito al depreciar)
+  accumulatedDepreciationAccountId String? // Depreciación acumulada (crédito al depreciar)
+  retainedEarningsAccountId String? // Utilidad/Pérdida del ejercicio (cierre contable)
+
+  updatedAt DateTime @updatedAt
+}
+
+// =====================================================
+// TESORERÍA (Fase C)
+// =====================================================
+
+model BankAccount {
+  id            String  @id @default(cuid())
+  bankName      String
+  accountNumber String
+  accountType   String // AHORROS | CORRIENTE
+  accountId     String? // cuenta contable del PUC asociada (opcional)
+  active        Boolean @default(true)
+
+  reconciliations BankReconciliation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum ReconciliationStatus {
+  OPEN
+  CLOSED
+}
+
+// Conciliación simplificada: registra el saldo del extracto bancario en una
+// fecha vs el saldo contable a esa fecha, y la diferencia. No importa
+// archivos de extracto ni hace match automático línea por línea — eso
+// queda como una fase posterior si se necesita.
+model BankReconciliation {
+  id Int @id @default(autoincrement())
+
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+
+  statementDate    DateTime
+  statementBalance Decimal              @db.Decimal(14, 2)
+  bookBalance      Decimal              @db.Decimal(14, 2)
+  difference       Decimal              @db.Decimal(14, 2)
+  status           ReconciliationStatus @default(OPEN)
+  note             String?
+
+  createdAt DateTime @default(now())
+}
+
+// Pago A un proveedor (distinto de Payment, que es cobro DE un cliente).
+model PurchasePayment {
+  id String @id @default(cuid())
+
+  purchaseId Int
+  purchase   Purchase @relation(fields: [purchaseId], references: [id])
+
+  amount    Decimal       @db.Decimal(14, 2)
+  method    PaymentMethod
+  reference String?
+
+  createdBy String?
+  user      User?   @relation(fields: [createdBy], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// =====================================================
+// ACTIVOS FIJOS (Fase D)
+// =====================================================
+
+enum DepreciationMethod {
+  STRAIGHT_LINE
+}
+
+model FixedAsset {
+  id   String @id @default(cuid())
+  code String @unique
+  name String
+
+  accountId String // cuenta de Propiedad Planta y Equipo del PUC
+
+  purchaseDate DateTime
+  purchaseCost Decimal  @db.Decimal(14, 2)
+
+  usefulLifeMonths       Int
+  method                 DepreciationMethod @default(STRAIGHT_LINE)
+  accumulatedDepreciation Decimal           @default(0) @db.Decimal(14, 2)
+  lastDepreciatedAt       DateTime?
+
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =====================================================
+// CIERRE CONTABLE (Fase D)
+// =====================================================
+
+model AccountingPeriodClose {
+  id Int @id @default(autoincrement())
+
+  periodEnd DateTime
+
+  journalEntryId Int
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// =====================================================
+// IMPUESTOS Y PRESUPUESTOS (Fase E)
+// =====================================================
+
+enum TaxType {
+  IVA
+  RETEFUENTE
+  RETEICA
+  RETEIVA
+  ICA
+  CONSUMO
+}
+
+model TaxRate {
+  id         String  @id @default(cuid())
+  name       String
+  type       TaxType
+  percentage Decimal @db.Decimal(6, 3)
+  accountId  String?
+  active     Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Budget {
+  id String @id @default(cuid())
+
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id])
+
+  year           Int
+  month          Int
+  budgetedAmount Decimal @db.Decimal(14, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([accountId, year, month])
+}
+

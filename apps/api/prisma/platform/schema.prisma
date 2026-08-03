@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/platform"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PLATFORM_DATABASE_URL")
+}
+
+// =====================================================
+// BD DE CONTROL-PLANE (compartida por toda la plataforma)
+//
+// Guarda el registro de empresas (a qué BD física conectarse)
+// y las cuentas de plataforma (SUPER_ADMIN). Los datos de
+// negocio de cada empresa NO viven aquí: viven en su propia
+// BD, ver prisma/tenant/schema.prisma.
+// =====================================================
+
+model Company {
+  id String @id @default(uuid())
+
+  // Registro / ruteo
+  businessName String
+  nit          String  @unique
+  dbName       String  @unique
+  active       Boolean @default(true)
+
+  tickets SupportTicket[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Tickets de soporte creados por usuarios de cualquier empresa. Viven en la
+// BD platform (no en la del tenant) porque el panel de SUPER_ADMIN necesita
+// verlos todos juntos, cruzando varias empresas a la vez.
+model SupportTicket {
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  subject     String
+  description String
+  type        String
+  priority    TicketPriority @default(MEDIUM)
+  status      TicketStatus   @default(OPEN)
+
+  createdByName  String
+  createdByEmail String
+
+  adminReply String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Cuentas de plataforma: administran empresas (crear/editar/desactivar),
+// no pertenecen a ninguna empresa y no operan datos de negocio.
+model PlatformUser {
+  id       String  @id @default(uuid())
+  name     String
+  email    String  @unique
+  password String
+  active   Boolean @default(true)
+  avatar   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Índice email -> empresa, usado únicamente para que el login sepa
+// a qué BD de tenant conectarse antes de abrir esa conexión.
+// Se mantiene sincronizado cada vez que se crea/edita/borra un
+// User dentro de una BD de tenant. No guarda password.
+model TenantUserDirectory {
+  email     String  @id
+  companyId String
+  userId    String
+
+  updatedAt DateTime @updatedAt
+}
+
+// Catálogo de reportes descargables, compartido por toda la plataforma
+// (no depende de empresa).
+model Reporte {
+  id          Int        @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  icon        String?
+  descargas   Descarga[]
+  createdAt   DateTime   @default(now())
+
+  @@map("reportes")
+}
+
+model Descarga {
+  id        Int      @id @default(autoincrement())
+  tipo      String
+  label     String
+  endpoint  String
+  reporteId Int
+  reporte   Reporte  @relation(fields: [reporteId], references: [id])
+
+  @@map("reportes_descargas")
+}

@@ -15,6 +15,10 @@ router.get("/:id", controller.getById)
 router.put("/:id", controller.update)
 router.delete("/:id", hasPermission("company.manage"), controller.remove)
 router.patch("/:id/activate", hasPermission("company.manage"), controller.activate)
+
+router.get("/:id/admin", controller.getAdmin)
+router.post("/:id/admin", controller.createAdmin)
+router.put("/:id/admin", controller.updateAdmin)
 router.patch(
   "/:id/logo",
   upload.single("logo"),

@@ -17,21 +17,7 @@ export const getReportes = async(req,res)=>{
 export const createReporte = async (req, res) => {
   try {
 
-    const { nombre, descripcion, icon, descargas } = req.body;
-
-    const data = await prisma.reporte.create({
-      data: {
-        nombre,
-        descripcion,
-        icon,
-        descargas: {
-          create: descargas
-        }
-      },
-      include: {
-        descargas: true
-      }
-    });
+    const data = await service.createReporte(req.body);
 
     res.json({ ok: true, data });
 
@@ -50,14 +36,7 @@ export const createReporte = async (req, res) => {
 export const getReporte = async (req, res) => {
   try {
 
-    const data = await prisma.reporte.findMany({
-      include: {
-        descargas: true
-      },
-      orderBy: {
-        id: "asc"
-      }
-    });
+    const data = await service.getReporte(req.params.id);
 
     res.json({ ok: true, data });
 

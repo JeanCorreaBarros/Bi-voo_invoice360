@@ -29,7 +29,7 @@ interface CreateModalState {
 }
 
 const ITEMS_PER_PAGE = 10
-const API_BASE = "https://plasticoslc.com/api"
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/").replace(/\/$/, "")
 
 function CreateSupplierModal({ isOpen, onClose, onSupplierCreated }: { isOpen: boolean; onClose: () => void; onSupplierCreated: () => void }) {
   const [loading, setLoading] = useState(false)

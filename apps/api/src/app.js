@@ -16,6 +16,8 @@ import userRoutes from './modules/users/user.routes.js'
 
 import companyRoutes from './modules/company/company.routes.js'
 
+import supportTicketRoutes from './modules/supportTickets/supportTicket.routes.js'
+
 import productRoutes from './modules/products/product.routes.js'
 
 import invoiceRoutes from './modules/invoices/invoice.routes.js'
@@ -40,8 +42,16 @@ import paymentRoutes from "./modules/payments/payment.routes.js"
 
 
 import inventoryRoutes from "./modules/inventory/inventory.routes.js"
+import warehouseRoutes from "./modules/warehouses/warehouse.routes.js"
 
 import reportesRoutes from "./modules/reports/reportes.routes.js"
+
+import accountingRoutes from "./modules/accounting/accounting.routes.js"
+import aiSettingsRoutes from "./modules/aiSettings/aiSettings.routes.js"
+import aiChatRoutes from "./modules/aiChat/aiChat.routes.js"
+import treasuryRoutes from "./modules/treasury/treasury.routes.js"
+import purchasePaymentRoutes from "./modules/purchases/purchasePayment.routes.js"
+import fixedAssetRoutes from "./modules/fixedAssets/fixedAsset.routes.js"
 
 
 dotenv.config()
@@ -65,6 +75,7 @@ app.use('/api', accessRoutes);
 app.use('/api/users', userRoutes)
 
 app.use("/api/companies", companyRoutes)
+app.use("/api/support-tickets", supportTicketRoutes)
 
 app.use('/api/products', productRoutes)
 
@@ -93,9 +104,22 @@ app.use("/api", accountsReceivableRoutes)
 app.use("/api", paymentRoutes)
 
 app.use("/api", inventoryRoutes)
+app.use("/api/warehouses", warehouseRoutes)
 
 
 
 app.use("/api", reportesRoutes)
+
+app.use("/api/accounting", accountingRoutes)
+
+app.use("/api/settings", aiSettingsRoutes)
+
+app.use("/api/ai", aiChatRoutes)
+
+app.use("/api/treasury", treasuryRoutes)
+
+app.use("/api/purchase-payments", purchasePaymentRoutes)
+
+app.use("/api/fixed-assets", fixedAssetRoutes)
 
 export default app

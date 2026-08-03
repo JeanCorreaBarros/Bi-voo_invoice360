@@ -64,7 +64,7 @@ const addPDFContent = (doc, data) => {
       { width: CONTENT_HEIGHT }
     )
     doc.fontSize(9).text(
-      `   Fecha: ${new Date(inv.orderDate).toLocaleDateString()} | Empresa ID: ${inv.companyId}`,
+      `   Fecha: ${new Date(inv.orderDate).toLocaleDateString()}`,
       { width: CONTENT_HEIGHT }
     )
     doc.moveDown(0.5)

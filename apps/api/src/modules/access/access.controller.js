@@ -2,7 +2,7 @@ import * as accessService from './access.service.js';
 
 export const getRoles = async (req, res) => {
   try {
-    const roles = await accessService.getRoles();
+    const roles = await accessService.getRoles(req.db);
 
     const formatted = roles.map(role => ({
       id: role.id,
@@ -25,7 +25,7 @@ export const getRoles = async (req, res) => {
 
 export const getPermissions = async (req, res) => {
   try {
-    const permissions = await accessService.getPermissions();
+    const permissions = await accessService.getPermissions(req.db);
     res.json(permissions);
   } catch (error) {
     console.error(error);

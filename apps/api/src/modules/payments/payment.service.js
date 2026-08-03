@@ -1,4 +1,6 @@
-export async function createPayment(db, data) {
+import { causeInvoicePayment } from '../../lib/accountingHooks.js'
+
+export async function createPayment(db, data, userId) {
 
   return db.$transaction(async (tx) => {
 
@@ -20,8 +22,18 @@ export async function createPayment(db, data) {
         invoiceId: data.invoiceId,
         amount: Number(data.amount),
         method: data.method,
-        reference: data.reference || null
+        reference: data.reference || null,
+        createdBy: userId || null
       }
+    })
+
+    // CAUSACIÓN CONTABLE AUTOMÁTICA (si el evento está activo)
+    await causeInvoicePayment(tx, {
+      paymentId: payment.id,
+      date: new Date(),
+      userId,
+      amount: data.amount,
+      method: data.method
     })
 
     // 3️⃣ calcular total pagado

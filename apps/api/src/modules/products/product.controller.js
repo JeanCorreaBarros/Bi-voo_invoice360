@@ -47,13 +47,14 @@ export async function update(req, res) {
 }
 
 export async function move(req, res) {
-  const { type, quantity, reason } = req.body
+  const { type, quantity, reason, warehouseId } = req.body
 
   const [product] = await moveStock(req.db, {
     productId: req.params.id,
     type,
     quantity,
-    reason
+    reason,
+    warehouseId
   })
 
   res.json({ entity: product })

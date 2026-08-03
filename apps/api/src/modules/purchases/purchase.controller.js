@@ -5,10 +5,13 @@ import {
   cancelPurchase,
   updatePurchase
 } from './purchase.service.js'
+import { generatePurchasesExcel } from './purchase.excel.js'
+
+const EXPORT_LIMIT = 2000
 
 export const create = async (req, res) => {
   try {
-    const purchase = await createPurchase(req.db, req.body)
+    const purchase = await createPurchase(req.db, req.body, req.user.id)
 
     res.json({
       ok: true,
@@ -35,6 +38,20 @@ export const list = async (req, res) => {
       ok: false,
       message: error.message
     })
+  }
+}
+
+export const exportExcel = async (req, res) => {
+  try {
+    const { from, to } = req.query
+    const result = await getPurchases(req.db, {
+      startDate: from,
+      endDate: to,
+      limit: EXPORT_LIMIT
+    })
+    await generatePurchasesExcel(res, result.data)
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
   }
 }
 

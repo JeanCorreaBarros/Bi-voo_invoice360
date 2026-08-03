@@ -1,28 +1,30 @@
 // src/modules/users/user.service.js
-import { prisma } from '../../lib/prisma.js'
-
 import bcrypt from 'bcryptjs'
+import { platformDb } from '../../lib/db.js'
 
 /* =========================
    CREATE USER
-   (User no tiene scope automático porque los SUPER_ADMIN
-   no pertenecen a ninguna empresa, así que companyId se
-   estampa a mano aquí)
+   `db` es el TenantPrismaClient de la empresa (req.db): la conexión
+   misma ya scopea los datos, no hace falta companyId.
 ========================= */
-export async function createUser(companyId, data) {
+export async function createUser(db, companyId, data) {
   const { name, email, password, roleIds = [] } = data
 
-  const existing = await prisma.user.findUnique({
+  const existing = await db.user.findUnique({ where: { email } })
+  if (existing) {
+    throw new Error('Email already exists')
+  }
+
+  const existingDirectoryEntry = await platformDb.tenantUserDirectory.findUnique({
     where: { email }
   })
-
-  if (existing) {
+  if (existingDirectoryEntry) {
     throw new Error('Email already exists')
   }
 
   let finalRoleIds = roleIds
   if (finalRoleIds.length === 0) {
-    const adminRole = await prisma.role.findFirst({ where: { name: 'ADMIN' } })
+    const adminRole = await db.role.findFirst({ where: { name: 'ADMIN' } })
     if (adminRole) {
       finalRoleIds = [adminRole.id]
     }
@@ -30,13 +32,12 @@ export async function createUser(companyId, data) {
 
   const hashed = await bcrypt.hash(password, 10)
 
-  return prisma.user.create({
+  const user = await db.user.create({
     data: {
       name,
       email,
       password: hashed,
       active: true,
-      companyId,
       roles: {
         create: finalRoleIds.map(roleId => ({
           role: { connect: { id: roleId } }
@@ -49,15 +50,10 @@ export async function createUser(companyId, data) {
       }
     }
   })
-}
 
-async function assertSameCompany(companyId, id) {
-  const user = await prisma.user.findUnique({ where: { id } })
-
-  // Si companyId es null (SUPER_ADMIN), le permitimos acceso a cualquier usuario
-  if (!user || (companyId !== null && user.companyId !== companyId)) {
-    throw new Error('User not found')
-  }
+  await platformDb.tenantUserDirectory.create({
+    data: { email, companyId, userId: user.id }
+  })
 
   return user
 }
@@ -65,12 +61,15 @@ async function assertSameCompany(companyId, id) {
 /* =========================
    UPDATE USER (NO PASSWORD)
 ========================= */
-export async function updateUser(companyId, id, data) {
-  await assertSameCompany(companyId, id)
+export async function updateUser(db, companyId, id, data) {
+  const currentUser = await db.user.findUnique({ where: { id } })
+  if (!currentUser) {
+    throw new Error('User not found')
+  }
 
   const { name, email, active, roleIds } = data
 
-  return prisma.user.update({
+  const user = await db.user.update({
     where: { id },
     data: {
       name,
@@ -91,17 +90,29 @@ export async function updateUser(companyId, id, data) {
       }
     }
   })
+
+  if (email && email !== currentUser.email) {
+    await platformDb.tenantUserDirectory.update({
+      where: { email: currentUser.email },
+      data: { email, companyId, userId: id }
+    })
+  }
+
+  return user
 }
 
 /* =========================
    CHANGE PASSWORD (ADMIN)
 ========================= */
-export async function changePassword(companyId, userId, newPassword) {
-  await assertSameCompany(companyId, userId)
+export async function changePassword(db, userId, newPassword) {
+  const user = await db.user.findUnique({ where: { id: userId } })
+  if (!user) {
+    throw new Error('User not found')
+  }
 
   const hashed = await bcrypt.hash(newPassword, 10)
 
-  return prisma.user.update({
+  return db.user.update({
     where: { id: userId },
     data: { password: hashed }
   })
@@ -110,10 +121,13 @@ export async function changePassword(companyId, userId, newPassword) {
 /* =========================
    TOGGLE ACTIVE
 ========================= */
-export async function toggleUser(companyId, id) {
-  const user = await assertSameCompany(companyId, id)
+export async function toggleUser(db, id) {
+  const user = await db.user.findUnique({ where: { id } })
+  if (!user) {
+    throw new Error('User not found')
+  }
 
-  return prisma.user.update({
+  return db.user.update({
     where: { id },
     data: { active: !user.active }
   })
@@ -122,12 +136,11 @@ export async function toggleUser(companyId, id) {
 /* =========================
    LIST USERS (PAGINATED)
 ========================= */
-export async function listUsers(companyId, page = 1, limit = 10) {
+export async function listUsers(db, page = 1, limit = 10) {
   const skip = (page - 1) * limit
 
   const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where: { companyId },
+    db.user.findMany({
       skip,
       take: limit,
       include: {
@@ -137,7 +150,7 @@ export async function listUsers(companyId, page = 1, limit = 10) {
       },
       orderBy: { createdAt: 'desc' }
     }),
-    prisma.user.count({ where: { companyId } })
+    db.user.count()
   ])
 
   return {

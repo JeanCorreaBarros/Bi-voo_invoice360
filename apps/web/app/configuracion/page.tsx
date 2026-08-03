@@ -20,12 +20,26 @@ import {
   Upload,
   Camera,
   Palette,
+  Bot,
+  KeyRound,
+  Search,
+  Pencil,
+  MessageCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 function useIsMobile(breakpoint = 640) {
   const [isMobile, setIsMobile] = useState<boolean | null>(null)
@@ -50,7 +64,7 @@ interface Resolution {
   companyId: number | null
 }
 
-type TabId = "info-general" | "legal" | "contacto" | "ubicacion" | "resoluciones"
+type TabId = "info-general" | "legal" | "contacto" | "ubicacion" | "resoluciones" | "integracion-ia"
 
 const MOBILE_TABS: { id: TabId; label: string; icon: React.ReactNode; short: string }[] = [
   { id: "info-general", icon: <Building2 size={18} />, label: "Información General", short: "Info" },
@@ -58,6 +72,128 @@ const MOBILE_TABS: { id: TabId; label: string; icon: React.ReactNode; short: str
   { id: "contacto",     icon: <Phone size={18} />,     label: "Contacto",             short: "Contacto" },
   { id: "ubicacion",    icon: <MapPin size={18} />,    label: "Ubicación",            short: "Ubicación" },
   { id: "resoluciones", icon: <FileText size={18} />,  label: "Resoluciones",         short: "Resoluc." },
+  { id: "integracion-ia", icon: <Bot size={18} />,     label: "Integración IA",       short: "IA" },
+]
+
+const AI_PROVIDERS = [
+  { value: "", label: "Selecciona un proveedor..." },
+  { value: "OPENAI", label: "OpenAI" },
+  { value: "ANTHROPIC", label: "Anthropic (Claude)" },
+  { value: "OTHER", label: "Otro" },
+]
+
+// Debe coincidir con DEFAULT_SYSTEM_PROMPT en apps/api/src/modules/aiChat/aiChat.service.js:
+// es el prompt que el backend realmente usa cuando el usuario no definió uno propio.
+const DEFAULT_SYSTEM_PROMPT =
+  "Eres el asistente de IA de Invoice360 by Bi-voo. Ayudas al usuario con preguntas de facturación y contabilidad de su empresa."
+
+// Precios orientativos por millón de tokens (entrada / salida), julio-agosto 2026.
+// Contrastar con la web del proveedor antes de decidir por costo.
+type ModelOption = { value: string; label: string; badge?: string; priceIn: string; priceOut: string; description: string }
+
+const MODEL_OPTIONS: Record<string, ModelOption[]> = {
+  OPENAI: [
+    { value: "gpt-5-nano", label: "GPT-5 Nano", badge: "más barato", priceIn: "0.05", priceOut: "0.40", description: "El más barato. Tareas simples y respuestas cortas." },
+    { value: "gpt-5-mini", label: "GPT-5 Mini", priceIn: "0.25", priceOut: "2.00", description: "Buen equilibrio precio/calidad para uso general." },
+    { value: "gpt-5", label: "GPT-5", priceIn: "1.25", priceOut: "10.00", description: "El más capaz de OpenAI. Tareas complejas." },
+    { value: "gpt-4o", label: "GPT-4o", priceIn: "2.50", priceOut: "10.00", description: "Generación anterior. Úsalo solo si ya dependías de él." },
+  ],
+  ANTHROPIC: [
+    { value: "claude-haiku-4-5", label: "Claude Haiku 4.5", badge: "más barato", priceIn: "1.00", priceOut: "5.00", description: "El más rápido y económico. Tareas simples." },
+    { value: "claude-sonnet-5", label: "Claude Sonnet 5", priceIn: "3.00", priceOut: "15.00", description: "Buen equilibrio precio/calidad para uso general." },
+    { value: "claude-opus-5", label: "Claude Opus 5", priceIn: "5.00", priceOut: "25.00", description: "El más capaz para tareas complejas y agentes." },
+    { value: "claude-fable-5", label: "Claude Fable 5", priceIn: "10.00", priceOut: "50.00", description: "Máxima capacidad para el razonamiento más exigente." },
+  ],
+}
+
+function ModelPicker({ provider, value, onChange }: { provider: string; value: string; onChange: (v: string) => void }) {
+  const options = MODEL_OPTIONS[provider]
+  if (!options) return null
+  return (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        {options.map((opt) => {
+          const selected = value === opt.value
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`text-left rounded-xl border p-3 transition-colors ${
+                selected ? "border-[hsl(209,79%,35%)] bg-[hsl(209,79%,35%,0.05)]" : "border-gray-200 bg-white hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className={`h-3.5 w-3.5 rounded-full border-2 shrink-0 ${
+                      selected ? "border-[hsl(209,79%,35%)] bg-[hsl(209,79%,35%)]" : "border-gray-300"
+                    }`}
+                  />
+                  <span className="text-sm font-bold text-gray-800 truncate">{opt.label}</span>
+                  {opt.badge && (
+                    <span className="text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                      {opt.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-gray-400 whitespace-nowrap shrink-0">${opt.priceIn} / ${opt.priceOut}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{opt.description}</p>
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-[11px] text-gray-400">
+        precio por millón de tokens (entrada / salida) · Precios orientativos (ago 2026) — contrasta con la web del proveedor antes de decidir por costo.
+      </p>
+    </div>
+  )
+}
+
+// Catálogo estático de eventos de automatización con IA. El id se persiste
+// en AIIntegrationSettings.enabledEvents; el catálogo en sí vive en código,
+// no en BD. `defaultPrompt` es el prompt sugerido que se muestra/edita en la
+// UI; se guarda como override en AIIntegrationSettings.eventPrompts solo si
+// el usuario lo modifica. La causación (fact_causacion_automatica,
+// cont_causacion_compras, cont_causacion_pagos) ya se ejecuta con reglas
+// deterministas (ver accountingHooks.js) — el resto todavía no tiene
+// ejecución real, solo guarda la preferencia/prompt para cuando se construya.
+type AIEvent = { id: string; module: "facturacion" | "contabilidad" | "inventario"; label: string; description: string; defaultPrompt: string }
+
+const AI_EVENTS: AIEvent[] = [
+  // ── Facturación ──
+  { id: "fact_causacion_automatica", module: "facturacion", label: "Causación automática al emitir factura", description: "Genera el comprobante contable automáticamente cuando se emite una factura de venta.", defaultPrompt: "Genera el comprobante contable de la factura de venta (débito cartera, crédito ventas e IVA) usando las cuentas configuradas en Configuración Contable." },
+  { id: "fact_clasificacion_ingreso", module: "facturacion", label: "Clasificación automática de ingresos", description: "Sugiere la cuenta contable de ingreso según el producto o servicio facturado.", defaultPrompt: "Analiza la descripción del producto o servicio facturado y sugiere la cuenta contable de ingresos más adecuada del Plan de Cuentas." },
+  { id: "fact_deteccion_duplicados", module: "facturacion", label: "Detección de facturas duplicadas", description: "Alerta si una factura parece repetida (mismo cliente, monto y fecha cercana).", defaultPrompt: "Revisa si existe una factura reciente con el mismo cliente, monto similar y fecha cercana, y alerta si parece un duplicado." },
+  { id: "fact_validacion_cliente", module: "facturacion", label: "Validación de datos del cliente", description: "Revisa NIT y datos de contacto antes de emitir la factura.", defaultPrompt: "Verifica que el NIT tenga un dígito de verificación válido y que los datos de contacto del cliente estén completos antes de emitir la factura." },
+  { id: "fact_sugerencia_pago", module: "facturacion", label: "Sugerencia de método de pago", description: "Recomienda el medio de pago según el historial del cliente.", defaultPrompt: "Con base en el historial de pagos del cliente, recomienda el medio de pago más probable o conveniente." },
+  { id: "fact_alertas_vencimiento", module: "facturacion", label: "Alertas de vencimiento", description: "Avisa de facturas próximas a vencer o ya vencidas.", defaultPrompt: "Identifica facturas próximas a vencer (en los próximos 5 días) o ya vencidas y genera una alerta para el usuario." },
+  { id: "fact_prediccion_mora", module: "facturacion", label: "Predicción de riesgo de mora", description: "Estima la probabilidad de que un cliente pague tarde.", defaultPrompt: "Estima, según el historial de pagos del cliente, la probabilidad de que la factura actual se pague con retraso." },
+  { id: "fact_recordatorios_cobro", module: "facturacion", label: "Recordatorios de cobro automáticos", description: "Genera recordatorios para clientes con cartera pendiente.", defaultPrompt: "Redacta un recordatorio de cobro breve y cordial para clientes con cartera pendiente, incluyendo monto y fecha de vencimiento." },
+  { id: "fact_ocr_documentos", module: "facturacion", label: "Lectura de documentos (OCR)", description: "Extrae datos desde documentos escaneados para prellenar facturas.", defaultPrompt: "Extrae del documento escaneado (NIT, fecha, ítems, valores) los datos necesarios para prellenar una factura o compra." },
+  { id: "fact_sugerencia_precio", module: "facturacion", label: "Sugerencia de precios", description: "Recomienda precios según el histórico de ventas del producto.", defaultPrompt: "Sugiere un precio de venta competitivo para el producto según su histórico de ventas y margen actual." },
+  { id: "fact_deteccion_anomalias", module: "facturacion", label: "Detección de montos anómalos", description: "Marca facturas con valores atípicos frente al histórico.", defaultPrompt: "Compara el monto de la factura contra el histórico del cliente/producto y señala si es un valor atípico." },
+  { id: "fact_conciliacion_pagos", module: "facturacion", label: "Conciliación automática de pagos", description: "Cruza pagos recibidos con facturas pendientes.", defaultPrompt: "Cruza los pagos recibidos con las facturas pendientes del cliente y sugiere la aplicación más probable." },
+
+  // ── Contabilidad ──
+  { id: "cont_causacion_compras", module: "contabilidad", label: "Causación automática de compras", description: "Genera el comprobante contable al registrar una compra.", defaultPrompt: "Genera el comprobante contable de la compra (débito inventario e IVA descontable, crédito proveedores) usando las cuentas configuradas." },
+  { id: "cont_causacion_pagos", module: "contabilidad", label: "Causación automática de pagos", description: "Genera el comprobante contable al registrar un pago.", defaultPrompt: "Genera el comprobante contable del pago (efectivo/banco contra cartera o cuentas por pagar según corresponda) usando las cuentas configuradas." },
+  { id: "cont_clasificacion_gastos", module: "contabilidad", label: "Clasificación de gastos", description: "Sugiere si un gasto debe registrarse como activo fijo o gasto del período.", defaultPrompt: "Analiza la descripción del gasto y determina si debe registrarse como activo fijo (si es un bien duradero) o como gasto del período." },
+  { id: "cont_sugerencia_cuenta", module: "contabilidad", label: "Sugerencia de cuenta contable", description: "Recomienda la cuenta del PUC según la descripción del movimiento.", defaultPrompt: "Con base en la descripción del movimiento, sugiere la cuenta del PUC más adecuada para registrarlo." },
+  { id: "cont_validacion_asientos", module: "contabilidad", label: "Validación de asientos", description: "Revisa que los comprobantes estén correctamente cuadrados y clasificados.", defaultPrompt: "Revisa que el comprobante esté cuadrado (débitos = créditos) y que las cuentas usadas correspondan a su naturaleza." },
+  { id: "cont_deteccion_errores", module: "contabilidad", label: "Detección de asientos inusuales", description: "Marca comprobantes con patrones fuera de lo normal.", defaultPrompt: "Compara el comprobante contra patrones históricos y señala si tiene una estructura o monto inusual." },
+  { id: "cont_conciliacion_bancaria", module: "contabilidad", label: "Conciliación bancaria automática", description: "Cruza movimientos bancarios con comprobantes contables.", defaultPrompt: "Cruza los movimientos del extracto bancario con los comprobantes contables registrados y sugiere las coincidencias." },
+  { id: "cont_cierre_mensual", module: "contabilidad", label: "Asistente de cierre mensual", description: "Identifica pendientes antes de cerrar el mes (ajustes, provisiones).", defaultPrompt: "Antes de cerrar el mes, lista los pendientes: ajustes, provisiones, conciliaciones o comprobantes sin cuadrar." },
+  { id: "cont_calculo_depreciacion", module: "contabilidad", label: "Cálculo de depreciación", description: "Sugiere y registra la depreciación periódica de activos fijos.", defaultPrompt: "Calcula la depreciación del período para cada activo fijo según su vida útil y método, y prepara el asiento correspondiente." },
+  { id: "cont_explicacion_reportes", module: "contabilidad", label: "Explicación de reportes en lenguaje natural", description: "Resume y explica el Balance de Prueba u otros reportes.", defaultPrompt: "Resume en lenguaje sencillo las cifras principales del reporte (Balance de Prueba, Balance General o Estado de Resultados) y explica las variaciones más relevantes." },
+  { id: "cont_alertas_impuestos", module: "contabilidad", label: "Alertas de vencimiento de impuestos", description: "Avisa de fechas límite de IVA, retención e ICA.", defaultPrompt: "Revisa las fechas límite de IVA, retención en la fuente e ICA según el calendario tributario y avisa con anticipación." },
+  { id: "cont_analisis_financiero", module: "contabilidad", label: "Análisis financiero automático", description: "Explica variaciones en utilidad, cartera o márgenes.", defaultPrompt: "Explica en lenguaje natural las variaciones en utilidad, cartera o márgenes comparando el período actual con el anterior." },
+  { id: "cont_proyeccion_flujo_caja", module: "contabilidad", label: "Proyección de flujo de caja", description: "Estima ingresos y egresos futuros según el histórico.", defaultPrompt: "Con base en el histórico de ingresos y egresos, proyecta el flujo de caja de los próximos meses." },
+  { id: "cont_sugerencia_centro_costo", module: "contabilidad", label: "Sugerencia de centro de costo", description: "Recomienda el centro de costo según el tipo de gasto.", defaultPrompt: "Según el tipo y descripción del gasto, sugiere el centro de costo al que debería asignarse." },
+
+  { id: "inv_analisis_inventario", module: "inventario", label: "Análisis de inventario automático", description: "Explica el estado del inventario: valor, rotación, agotados y sobrestock.", defaultPrompt: "Analiza el estado del inventario (valor total, productos agotados, próximos a agotarse, sobrestock y rotación) y explica en lenguaje sencillo qué necesita atención y por qué." },
+  { id: "inv_sugerencia_reposicion", module: "inventario", label: "Sugerencia de reposición de stock", description: "Recomienda qué productos reabastecer y en qué cantidad según su rotación.", defaultPrompt: "Con base en el stock actual, el mínimo configurado y las ventas recientes, sugiere qué productos reabastecer primero y una cantidad razonable de reposición." },
 ]
 
 export default function ConfiguracionPage() {
@@ -82,6 +218,27 @@ export default function ConfiguracionPage() {
   const [isLoadingResoluciones, setIsLoadingResoluciones] = useState(false)
   const [isCreatingResolucion, setIsCreatingResolucion] = useState(false)
   const [nuevaResolucion, setNuevaResolucion] = useState({ prefix: "", fromNumber: 1, toNumber: 5000 })
+
+  const [aiSettings, setAiSettings] = useState({
+    provider: "", model: "", temperature: 0.7, active: false, hasApiKey: false,
+    enabledEvents: [] as string[],
+    systemPrompt: "", eventPrompts: {} as Record<string, string>, chatEnabled: false,
+  })
+  const [aiApiKeyInput, setAiApiKeyInput] = useState("")
+  const [isLoadingAI, setIsLoadingAI] = useState(false)
+  const [isSavingAI, setIsSavingAI] = useState(false)
+  const [savingEventId, setSavingEventId] = useState<string | null>(null)
+  const [eventSearch, setEventSearch] = useState("")
+
+  const [isEditingSystemPrompt, setIsEditingSystemPrompt] = useState(false)
+  const [systemPromptDraft, setSystemPromptDraft] = useState("")
+  const [isSavingSystemPrompt, setIsSavingSystemPrompt] = useState(false)
+
+  const [editingEvent, setEditingEvent] = useState<AIEvent | null>(null)
+  const [eventPromptDraft, setEventPromptDraft] = useState("")
+  const [isSavingEventPrompt, setIsSavingEventPrompt] = useState(false)
+
+  const [isSavingChatToggle, setIsSavingChatToggle] = useState(false)
 
   const logoInputRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
@@ -138,7 +295,182 @@ export default function ConfiguracionPage() {
     }
     load()
     cargarResoluciones()
+    cargarAISettings()
   }, [])
+
+  const cargarAISettings = async () => {
+    try {
+      setIsLoadingAI(true)
+      const token = sessionStorage.getItem("token")
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const res = await fetch(`${apiBase}settings/ai`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+      })
+      if (res.ok) {
+        const result = await res.json()
+        if (result.ok && result.data) {
+          setAiSettings({
+            provider: result.data.provider || "",
+            model: result.data.model || "",
+            temperature: result.data.temperature ?? 0.7,
+            active: result.data.active || false,
+            hasApiKey: result.data.hasApiKey || false,
+            enabledEvents: result.data.enabledEvents || [],
+            systemPrompt: result.data.systemPrompt || "",
+            eventPrompts: result.data.eventPrompts || {},
+            chatEnabled: result.data.chatEnabled || false,
+          })
+        }
+      }
+    } catch (e) { console.error(e) }
+    finally { setIsLoadingAI(false) }
+  }
+
+  const guardarAISettings = async () => {
+    try {
+      setIsSavingAI(true)
+      const token = sessionStorage.getItem("token")
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const res = await fetch(`${apiBase}settings/ai`, {
+        method: "PUT",
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: aiSettings.provider || undefined,
+          model: aiSettings.model || undefined,
+          temperature: aiSettings.temperature,
+          apiKey: aiApiKeyInput || undefined,
+        }),
+      })
+      if (!res.ok) throw new Error("Error al guardar la integración de IA")
+      const result = await res.json()
+      if (result.ok && result.data) {
+        setAiSettings({
+          provider: result.data.provider || "",
+          model: result.data.model || "",
+          temperature: result.data.temperature ?? 0.7,
+          active: result.data.active || false,
+          hasApiKey: result.data.hasApiKey || false,
+          enabledEvents: result.data.enabledEvents || [],
+          systemPrompt: result.data.systemPrompt || "",
+          eventPrompts: result.data.eventPrompts || {},
+          chatEnabled: result.data.chatEnabled || false,
+        })
+      }
+      setAiApiKeyInput("")
+      toast.success("Integración de IA guardada correctamente")
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Error al guardar") }
+    finally { setIsSavingAI(false) }
+  }
+
+  const iniciarEdicionSystemPrompt = () => {
+    setSystemPromptDraft(aiSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT)
+    setIsEditingSystemPrompt(true)
+  }
+
+  const guardarSystemPrompt = async () => {
+    try {
+      setIsSavingSystemPrompt(true)
+      const token = sessionStorage.getItem("token")
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const res = await fetch(`${apiBase}settings/ai`, {
+        method: "PUT",
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+        body: JSON.stringify({ systemPrompt: systemPromptDraft }),
+      })
+      if (!res.ok) throw new Error("Error al guardar el prompt de sistema")
+      const result = await res.json()
+      if (result.ok && result.data) {
+        setAiSettings((prev) => ({ ...prev, systemPrompt: result.data.systemPrompt || "" }))
+      }
+      setIsEditingSystemPrompt(false)
+      toast.success("Prompt de sistema guardado")
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Error al guardar") }
+    finally { setIsSavingSystemPrompt(false) }
+  }
+
+  const toggleChatEnabled = async (enabled: boolean) => {
+    setAiSettings((prev) => ({ ...prev, chatEnabled: enabled }))
+    setIsSavingChatToggle(true)
+    try {
+      const token = sessionStorage.getItem("token")
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const res = await fetch(`${apiBase}settings/ai`, {
+        method: "PUT",
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+        body: JSON.stringify({ chatEnabled: enabled }),
+      })
+      if (!res.ok) throw new Error("Error al actualizar el chat")
+    } catch (e) {
+      setAiSettings((prev) => ({ ...prev, chatEnabled: !enabled }))
+      toast.error(e instanceof Error ? e.message : "Error al actualizar el chat")
+    } finally {
+      setIsSavingChatToggle(false)
+    }
+  }
+
+  const abrirEditorPromptEvento = (ev: AIEvent) => {
+    setEditingEvent(ev)
+    setEventPromptDraft(aiSettings.eventPrompts[ev.id] || ev.defaultPrompt)
+  }
+
+  const guardarPromptEvento = async () => {
+    if (!editingEvent) return
+    try {
+      setIsSavingEventPrompt(true)
+      const next = { ...aiSettings.eventPrompts, [editingEvent.id]: eventPromptDraft }
+      const token = sessionStorage.getItem("token")
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const res = await fetch(`${apiBase}settings/ai/event-prompts`, {
+        method: "PUT",
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+        body: JSON.stringify({ eventPrompts: next }),
+      })
+      if (!res.ok) throw new Error("Error al guardar el prompt del evento")
+      const result = await res.json()
+      if (result.ok && result.data) {
+        setAiSettings((prev) => ({ ...prev, eventPrompts: result.data.eventPrompts || {} }))
+      }
+      setEditingEvent(null)
+      toast.success("Prompt del evento guardado")
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Error al guardar") }
+    finally { setIsSavingEventPrompt(false) }
+  }
+
+  const matchesEventSearch = (ev: AIEvent) => {
+    const q = eventSearch.trim().toLowerCase()
+    if (!q) return true
+    return ev.label.toLowerCase().includes(q) || ev.description.toLowerCase().includes(q)
+  }
+
+  const toggleAIEvent = async (eventId: string, enabled: boolean) => {
+    const next = enabled
+      ? [...aiSettings.enabledEvents, eventId]
+      : aiSettings.enabledEvents.filter((id) => id !== eventId)
+
+    setAiSettings({ ...aiSettings, enabledEvents: next })
+    setSavingEventId(eventId)
+    try {
+      const token = sessionStorage.getItem("token")
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const res = await fetch(`${apiBase}settings/ai/events`, {
+        method: "PUT",
+        headers: { Authorization: token ? `Bearer ${token}` : "", "Content-Type": "application/json" },
+        body: JSON.stringify({ enabledEvents: next }),
+      })
+      if (!res.ok) throw new Error("Error al actualizar el evento")
+    } catch (e) {
+      // revertir si falla
+      setAiSettings((prev) => ({
+        ...prev,
+        enabledEvents: enabled
+          ? prev.enabledEvents.filter((id) => id !== eventId)
+          : [...prev.enabledEvents, eventId],
+      }))
+      toast.error(e instanceof Error ? e.message : "Error al actualizar el evento")
+    } finally {
+      setSavingEventId(null)
+    }
+  }
 
   const crearResolucion = async () => {
     if (!nuevaResolucion.prefix.trim()) { toast.error("El prefijo es obligatorio"); return }
@@ -221,6 +553,35 @@ export default function ConfiguracionPage() {
     visible: { y: 0, opacity: 1, transition: { type: "spring" as const, stiffness: 100 } },
   }
 
+  const eventPromptDialog = (
+    <Dialog open={!!editingEvent} onOpenChange={(open) => { if (!open) setEditingEvent(null) }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{editingEvent?.label}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-500">{editingEvent?.description}</p>
+        <Textarea
+          rows={6}
+          placeholder="Prompt que usará la IA para este evento..."
+          value={eventPromptDraft}
+          onChange={(e) => setEventPromptDraft(e.target.value)}
+        />
+        <DialogFooter>
+          <Button variant="outline" disabled={isSavingEventPrompt} onClick={() => setEditingEvent(null)}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={guardarPromptEvento}
+            disabled={isSavingEventPrompt}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isSavingEventPrompt ? "Guardando..." : "Guardar Prompt"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+
   if (isMobile === null) return null
 
   /* ═══════════════════════════════════════════
@@ -230,6 +591,7 @@ export default function ConfiguracionPage() {
     return (
       <div className="min-h-screen bg-white flex flex-col">
         <DashboardHeader />
+        {eventPromptDialog}
         <main className="flex-1 overflow-y-auto p-9">
           <div className="flex min-h-screen">
             <div className="flex flex-col flex-1 overflow-hidden">
@@ -258,6 +620,7 @@ export default function ConfiguracionPage() {
                     <TabsTrigger value="contacto">Contacto</TabsTrigger>
                     <TabsTrigger value="ubicacion">Ubicación</TabsTrigger>
                     <TabsTrigger value="resoluciones">Resoluciones</TabsTrigger>
+                    <TabsTrigger value="integracion-ia">Integración IA</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="info-general">
@@ -623,6 +986,222 @@ export default function ConfiguracionPage() {
                       </Card>
                     </motion.div>
                   </TabsContent>
+
+                  <TabsContent value="integracion-ia">
+                    <motion.div>
+                      <Card className="shadow-xl">
+                        <CardHeader>
+                          <CardTitle>Integración IA</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <p className="text-sm text-gray-500">
+                            Conecta un proveedor de IA para futuras funciones de contabilidad y facturación inteligente.
+                            El API key se guarda cifrado — nunca se muestra de nuevo, solo indicamos si ya está configurado.
+                          </p>
+
+                          <div className="space-y-2">
+                            <Label>Proveedor</Label>
+                            <select
+                              className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm"
+                              value={aiSettings.provider}
+                              onChange={(e) => setAiSettings({ ...aiSettings, provider: e.target.value })}
+                            >
+                              {AI_PROVIDERS.map((p) => (
+                                <option key={p.value} value={p.value}>{p.label}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Modelo</Label>
+                            <ModelPicker
+                              provider={aiSettings.provider}
+                              value={aiSettings.model}
+                              onChange={(v) => setAiSettings({ ...aiSettings, model: v })}
+                            />
+                            <Input
+                              placeholder="O escribe otro modelo"
+                              value={aiSettings.model}
+                              onChange={(e) => setAiSettings({ ...aiSettings, model: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Temperatura ({(aiSettings.temperature ?? 0.7).toFixed(1)})</Label>
+                            <input
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.1}
+                              value={aiSettings.temperature ?? 0.7}
+                              onChange={(e) => setAiSettings({ ...aiSettings, temperature: parseFloat(e.target.value) })}
+                              className="w-full accent-[hsl(209,79%,35%)]"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>API Key</Label>
+                            <div className="relative">
+                              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                              <Input
+                                type="password"
+                                className="pl-9"
+                                placeholder={aiSettings.hasApiKey ? "•••••••••••••• (configurado — escribe para reemplazar)" : "Pega tu API key"}
+                                value={aiApiKeyInput}
+                                onChange={(e) => setAiApiKeyInput(e.target.value)}
+                              />
+                            </div>
+                            {aiSettings.hasApiKey && (
+                              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Configurado
+                              </span>
+                            )}
+                          </div>
+
+                          <Button
+                            onClick={guardarAISettings}
+                            disabled={isLoadingAI || isSavingAI}
+                            className="bg-blue-600 hover:bg-blue-700 hover:scale-95 text-white"
+                          >
+                            <SaveIcon className="mr-2 h-4 w-4" />
+                            {isSavingAI ? "Guardando..." : "Guardar Integración"}
+                          </Button>
+
+                          <div className="pt-2 border-t border-gray-100 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label>Prompt de Sistema</Label>
+                              {!isEditingSystemPrompt && (
+                                <Button size="sm" variant="outline" onClick={iniciarEdicionSystemPrompt}>
+                                  <Pencil className="mr-1.5 h-3.5 w-3.5" /> Editar
+                                </Button>
+                              )}
+                            </div>
+                            {isEditingSystemPrompt ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  rows={5}
+                                  className="bg-white"
+                                  placeholder="Ej: Eres el asistente contable de mi empresa, responde en español y de forma concisa..."
+                                  value={systemPromptDraft}
+                                  onChange={(e) => setSystemPromptDraft(e.target.value)}
+                                />
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={guardarSystemPrompt}
+                                    disabled={isSavingSystemPrompt}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                                  >
+                                    {isSavingSystemPrompt ? "Guardando..." : "Guardar Prompt"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={isSavingSystemPrompt}
+                                    onClick={() => setIsEditingSystemPrompt(false)}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3 space-y-1">
+                                <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                                  {aiSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT}
+                                </p>
+                                {!aiSettings.systemPrompt && (
+                                  <p className="text-[11px] text-gray-400">Prompt predeterminado — puedes editarlo.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                            <div>
+                              <Label>Chat Flotante</Label>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                Muestra una burbuja de chat en toda la app para hablar con el agente. Si la
+                                desactivas, la IA sigue funcionando igual, solo se oculta el chat.
+                              </p>
+                            </div>
+                            <Switch
+                              checked={aiSettings.chatEnabled}
+                              disabled={isSavingChatToggle}
+                              onCheckedChange={(checked) => toggleChatEnabled(checked)}
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      <Card className="shadow-xl mt-6">
+                        <CardHeader>
+                          <CardTitle>Eventos de Automatización</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                          <p className="text-sm text-gray-500">
+                            Activa o desactiva qué acciones puede automatizar la IA. Todavía no se ejecutan
+                            (falta el motor de automatización) — esto guarda tu preferencia para cuando esté disponible.
+                          </p>
+
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              className="pl-9"
+                              placeholder="Buscar evento..."
+                              value={eventSearch}
+                              onChange={(e) => setEventSearch(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="max-h-[520px] overflow-y-auto pr-1 space-y-6">
+                            {(["facturacion", "contabilidad", "inventario"] as const).map((mod) => {
+                              const events = AI_EVENTS.filter((ev) => ev.module === mod && matchesEventSearch(ev))
+                              if (events.length === 0) return null
+                              return (
+                                <div key={mod} className="space-y-2">
+                                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                                    {mod === "facturacion" ? "Facturación" : mod === "contabilidad" ? "Contabilidad" : "Inventario"}
+                                  </p>
+                                  <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                                    {events.map((ev) => (
+                                      <div key={ev.id} className="flex items-center justify-between gap-4 px-4 py-3 bg-white">
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-semibold text-gray-800">{ev.label}</p>
+                                          <p className="text-xs text-gray-500">{ev.description}</p>
+                                          <p className="text-xs text-blue-600 mt-1 line-clamp-1">
+                                            Prompt{!aiSettings.eventPrompts[ev.id] && " (predeterminado)"}: {aiSettings.eventPrompts[ev.id] || ev.defaultPrompt}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => abrirEditorPromptEvento(ev)}
+                                          >
+                                            <Pencil className="h-3.5 w-3.5" />
+                                          </Button>
+                                          <Switch
+                                            checked={aiSettings.enabledEvents.includes(ev.id)}
+                                            disabled={savingEventId === ev.id}
+                                            onCheckedChange={(checked) => toggleAIEvent(ev.id, checked)}
+                                          />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            {AI_EVENTS.filter(matchesEventSearch).length === 0 && (
+                              <p className="text-sm text-gray-400 text-center py-8">
+                                No se encontraron eventos para &quot;{eventSearch}&quot;.
+                              </p>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </TabsContent>
                 </Tabs>
               </motion.main>
             </div>
@@ -639,6 +1218,7 @@ export default function ConfiguracionPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <DashboardHeader />
+      {eventPromptDialog}
 
       {/* ── Sticky top bar ── */}
       <div className="sticky top-0 z-20 bg-white border-b border-gray-100 shadow-sm px-4 py-3 flex items-center justify-between">
@@ -1058,6 +1638,218 @@ export default function ConfiguracionPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {/* ── INTEGRACIÓN IA ── */}
+            {activeTab === "integracion-ia" && (
+              <Card className="rounded-2xl border-0 shadow-sm">
+                <CardContent className="p-4 space-y-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Integración IA</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Conecta un proveedor de IA para futuras funciones de contabilidad y facturación inteligente.
+                    El API key se guarda cifrado — nunca se muestra de nuevo.
+                  </p>
+
+                  <MobileField label="Proveedor">
+                    <select
+                      className="w-full h-11 px-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white text-sm"
+                      value={aiSettings.provider}
+                      onChange={(e) => setAiSettings({ ...aiSettings, provider: e.target.value })}
+                    >
+                      {AI_PROVIDERS.map((p) => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </select>
+                  </MobileField>
+
+                  <MobileField label="Modelo">
+                    <div className="space-y-2">
+                      <ModelPicker
+                        provider={aiSettings.provider}
+                        value={aiSettings.model}
+                        onChange={(v) => setAiSettings({ ...aiSettings, model: v })}
+                      />
+                      <Input
+                        className="h-11 rounded-xl border-gray-200 bg-gray-50 focus:bg-white text-sm"
+                        placeholder="O escribe otro modelo"
+                        value={aiSettings.model}
+                        onChange={(e) => setAiSettings({ ...aiSettings, model: e.target.value })}
+                      />
+                    </div>
+                  </MobileField>
+
+                  <MobileField label={`Temperatura (${(aiSettings.temperature ?? 0.7).toFixed(1)})`}>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.1}
+                      value={aiSettings.temperature ?? 0.7}
+                      onChange={(e) => setAiSettings({ ...aiSettings, temperature: parseFloat(e.target.value) })}
+                      className="w-full accent-[hsl(209,79%,35%)]"
+                    />
+                  </MobileField>
+
+                  <MobileField label="API Key">
+                    <Input
+                      type="password"
+                      className="h-11 rounded-xl border-gray-200 bg-gray-50 focus:bg-white text-sm"
+                      placeholder={aiSettings.hasApiKey ? "•••••••••••• (configurado)" : "Pega tu API key"}
+                      value={aiApiKeyInput}
+                      onChange={(e) => setAiApiKeyInput(e.target.value)}
+                    />
+                  </MobileField>
+
+                  {aiSettings.hasApiKey && (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                      <CheckCircle2 size={12} /> Configurado
+                    </span>
+                  )}
+
+                  <Button
+                    onClick={guardarAISettings}
+                    disabled={isLoadingAI || isSavingAI}
+                    className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                  >
+                    <SaveIcon className="mr-2 h-4 w-4" />
+                    {isSavingAI ? "Guardando..." : "Guardar Integración"}
+                  </Button>
+
+                  <div className="pt-3 border-t border-gray-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-gray-600">Prompt de Sistema</Label>
+                      {!isEditingSystemPrompt && (
+                        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={iniciarEdicionSystemPrompt}>
+                          <Pencil className="mr-1 h-3 w-3" /> Editar
+                        </Button>
+                      )}
+                    </div>
+                    {isEditingSystemPrompt ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          rows={5}
+                          className="rounded-xl border-gray-200 bg-white text-sm"
+                          placeholder="Ej: Eres el asistente contable de mi empresa..."
+                          value={systemPromptDraft}
+                          onChange={(e) => setSystemPromptDraft(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={guardarSystemPrompt}
+                            disabled={isSavingSystemPrompt}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl h-9 text-xs"
+                          >
+                            {isSavingSystemPrompt ? "Guardando..." : "Guardar Prompt"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isSavingSystemPrompt}
+                            className="rounded-xl h-9 text-xs"
+                            onClick={() => setIsEditingSystemPrompt(false)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1">
+                        <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                          {aiSettings.systemPrompt || DEFAULT_SYSTEM_PROMPT}
+                        </p>
+                        {!aiSettings.systemPrompt && (
+                          <p className="text-[10px] text-gray-400">Prompt predeterminado — puedes editarlo.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                    <div className="pr-3">
+                      <Label className="text-xs font-semibold text-gray-600">Chat Flotante</Label>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Burbuja de chat visible en toda la app. Si la desactivas, la IA sigue funcionando.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={aiSettings.chatEnabled}
+                      disabled={isSavingChatToggle}
+                      onCheckedChange={(checked) => toggleChatEnabled(checked)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── EVENTOS DE AUTOMATIZACIÓN IA ── */}
+            {activeTab === "integracion-ia" && (
+              <Card className="rounded-2xl border-0 shadow-sm">
+                <CardContent className="p-4 space-y-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Eventos de Automatización</p>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Activa o desactiva qué acciones puede automatizar la IA. Todavía no se ejecutan
+                    (falta el motor de automatización) — esto guarda tu preferencia.
+                  </p>
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                    <Input
+                      className="h-10 rounded-xl border-gray-200 bg-gray-50 focus:bg-white text-xs pl-8"
+                      placeholder="Buscar evento..."
+                      value={eventSearch}
+                      onChange={(e) => setEventSearch(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="max-h-[420px] overflow-y-auto pr-1 space-y-4">
+                    {(["facturacion", "contabilidad", "inventario"] as const).map((mod) => {
+                      const events = AI_EVENTS.filter((ev) => ev.module === mod && matchesEventSearch(ev))
+                      if (events.length === 0) return null
+                      return (
+                        <div key={mod} className="space-y-2">
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                            {mod === "facturacion" ? "Facturación" : "Contabilidad"}
+                          </p>
+                          <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+                            {events.map((ev) => (
+                              <div key={ev.id} className="flex items-center justify-between gap-3 px-3 py-3 bg-gray-50/50">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-gray-800">{ev.label}</p>
+                                  <p className="text-[11px] text-gray-500 mt-0.5">{ev.description}</p>
+                                  <p className="text-[11px] text-blue-600 mt-1 line-clamp-1">
+                                    Prompt{!aiSettings.eventPrompts[ev.id] && " (predeterminado)"}: {aiSettings.eventPrompts[ev.id] || ev.defaultPrompt}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => abrirEditorPromptEvento(ev)}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                  <Switch
+                                    checked={aiSettings.enabledEvents.includes(ev.id)}
+                                    disabled={savingEventId === ev.id}
+                                    onCheckedChange={(checked) => toggleAIEvent(ev.id, checked)}
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {AI_EVENTS.filter(matchesEventSearch).length === 0 && (
+                      <p className="text-xs text-gray-400 text-center py-8">
+                        No se encontraron eventos para &quot;{eventSearch}&quot;.
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </motion.div>
         </AnimatePresence>

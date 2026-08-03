@@ -448,8 +448,8 @@ function CreatePurchaseModal({ isOpen, onClose, onPurchaseCreated }: {
     if (!isOpen) return
     const token = sessionStorage.getItem("token")
     const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-    fetch(`${apiBase}/products`, { headers }).then(r => r.ok && r.json()).then(d => d && setProducts(d)).catch(console.error)
-    fetch(`${apiBase}/suppliers`, { headers }).then(r => r.ok && r.json()).then(d => d && setSuppliers(d.filter((s: Supplier) => s.active))).catch(console.error)
+    fetch(`${apiBase}products`, { headers }).then(r => r.ok && r.json()).then(d => d && setProducts(d)).catch(console.error)
+    fetch(`${apiBase}suppliers`, { headers }).then(r => r.ok && r.json()).then(d => d && setSuppliers(d.filter((s: Supplier) => s.active))).catch(console.error)
   }, [isOpen, apiBase])
 
   useEffect(() => {
@@ -495,7 +495,7 @@ function CreatePurchaseModal({ isOpen, onClose, onPurchaseCreated }: {
     setLoading(true)
     try {
       const token = sessionStorage.getItem("token")
-      const res = await fetch(`${apiBase}/purchases`, {
+      const res = await fetch(`${apiBase}purchases`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ supplierId: form.supplierId, supplierName: form.supplierName, supplierNit: form.supplierNit, invoiceNumber: form.invoiceNumber, items: form.items }),
@@ -661,8 +661,8 @@ function EditPurchaseModal({ isOpen, purchase, onClose, onPurchaseUpdated }: {
     if (!isOpen) return
     const token = sessionStorage.getItem("token")
     const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
-    fetch(`${apiBase}/products`, { headers }).then(r => r.ok && r.json()).then(d => d && setProducts(d)).catch(console.error)
-    fetch(`${apiBase}/suppliers`, { headers }).then(r => r.ok && r.json()).then(d => d && setSuppliers(d.filter((s: Supplier) => s.active))).catch(console.error)
+    fetch(`${apiBase}products`, { headers }).then(r => r.ok && r.json()).then(d => d && setProducts(d)).catch(console.error)
+    fetch(`${apiBase}suppliers`, { headers }).then(r => r.ok && r.json()).then(d => d && setSuppliers(d.filter((s: Supplier) => s.active))).catch(console.error)
   }, [isOpen, apiBase])
 
   useEffect(() => {
@@ -709,7 +709,7 @@ function EditPurchaseModal({ isOpen, purchase, onClose, onPurchaseUpdated }: {
     setLoading(true)
     try {
       const token = sessionStorage.getItem("token")
-      const res = await fetch(`${apiBase}/purchases/${purchase.id}`, {
+      const res = await fetch(`${apiBase}purchases/${purchase.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ supplierId: form.supplierId || undefined, supplierName: form.supplierName, supplierNit: form.supplierNit, invoiceNumber: form.invoiceNumber, items: form.items }),
@@ -833,7 +833,7 @@ export default function ComprasPage() {
     setLoading(true)
     try {
       const token = sessionStorage.getItem("token")
-      const res = await fetch(`${apiBase}/purchases`, {
+      const res = await fetch(`${apiBase}purchases`, {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       })
       if (res.ok) {

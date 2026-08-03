@@ -6,10 +6,13 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
-  },
-  "prisma": {
-    "seed": "node src/seed/admin.js"
+    "dev": "nodemon src/index.js",
+    "db:platform:migrate": "prisma migrate dev --schema=prisma/platform/schema.prisma",
+    "db:tenant:migrate": "prisma migrate dev --schema=prisma/tenant/schema.prisma",
+    "db:generate": "prisma generate --schema=prisma/platform/schema.prisma && prisma generate --schema=prisma/tenant/schema.prisma",
+    "seed:platform": "node src/seed/platform.js",
+    "seed:tenant": "node src/seed/tenant.js",
+    "db:tenant:migrate-all": "node src/scripts/migrate-all-tenants.js"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +29,7 @@
     "multer": "^2.0.2",
     "nodemailer": "^8.0.1",
     "pdfkit": "^0.17.2",
+    "pg": "^8.22.0",
     "prisma": "^6.19.2",
     "qrcode": "^1.5.4"
   },

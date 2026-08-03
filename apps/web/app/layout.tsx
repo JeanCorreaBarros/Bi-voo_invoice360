@@ -7,6 +7,7 @@ import "./globals.css"
 import { ClientProviders } from "@/components/client-providers"
 import { ProtectedLayout } from "@/components/protected-layout"
 import { HotToaster } from "@/components/hot-toaster"
+import { AiChatBubble } from "@/components/ai-chat-bubble"
 
 const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
@@ -42,6 +43,7 @@ export default function RootLayout({
         <ClientProviders>
           <ProtectedLayout>{children}</ProtectedLayout>
         </ClientProviders>
+        <AiChatBubble />
         <HotToaster />
       </body>
     </html>

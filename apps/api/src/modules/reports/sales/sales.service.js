@@ -41,8 +41,7 @@ export const getSalesListService = async (db, { from, to }) => {
       orderTotalAfterTax: true,
       orderTotalAmountDue: true,
       dianStatus: true,
-      status: true,
-      companyId: true
+      status: true
     }
   });
 };
@@ -106,8 +105,7 @@ export const getSalesService = async (db, {
         orderDate: true,
         orderTotalAfterTax: true,
         status: true,
-        dianStatus: true,
-        companyId: true
+        dianStatus: true
       }
     }),
 

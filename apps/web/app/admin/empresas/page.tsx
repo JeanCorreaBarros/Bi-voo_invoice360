@@ -9,6 +9,7 @@ import { DashboardHeader } from "@/components/dashboard-header";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/lib/auth-context";
 import {
   PlusIcon,
   Building2,
@@ -27,6 +28,7 @@ type Company = {
   businessName: string;
   tradeName?: string | null;
   nit: string;
+  dv?: string | null;
   email?: string | null;
   phone?: string | null;
   active: boolean;
@@ -34,6 +36,21 @@ type Company = {
 };
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/";
+
+// Dígito de verificación de NIT (DIAN, módulo 11).
+function calcularDV(nitRaw: string): string {
+  const nit = nitRaw.replace(/\D/g, "");
+  if (!nit) return "";
+  const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+  const digitos = nit.split("").reverse();
+  let suma = 0;
+  for (let i = 0; i < digitos.length && i < pesos.length; i++) {
+    suma += parseInt(digitos[i], 10) * pesos[i];
+  }
+  const residuo = suma % 11;
+  const dv = residuo > 1 ? 11 - residuo : residuo;
+  return String(dv);
+}
 
 function Field({
   label,
@@ -75,6 +92,7 @@ function Field({
 
 export default function EmpresasAdminPage() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -88,6 +106,7 @@ export default function EmpresasAdminPage() {
   const emptyForm = {
     businessName: "",
     nit: "",
+    dv: "",
     tradeName: "",
     email: "",
     phone: "",
@@ -145,14 +164,11 @@ export default function EmpresasAdminPage() {
     setEditingAdminId(null);
     try {
       const token = getToken();
-      const res = await fetch(`${apiBase}users?companyId=${companyId}`, {
+      const res = await fetch(`${apiBase}companies/${companyId}/admin`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (!res.ok) return;
-      const data = await res.json();
-      const users: any[] = Array.isArray(data) ? data : data?.data ?? [];
-      // Tomar el primer usuario ADMIN de la empresa
-      const admin = users.find((u: any) => u.roles?.some((r: any) => r.role?.name === "ADMIN")) || users[0];
+      const { data: admin } = await res.json();
       if (admin) {
         setEditingAdminId(admin.id);
         setForm((prev) => ({ ...prev, adminName: admin.name || "", adminEmail: admin.email || "" }));
@@ -179,10 +195,11 @@ export default function EmpresasAdminPage() {
     try {
       const token = getToken();
       
-      const payload = editingId 
+      const payload = editingId
         ? {
             businessName: form.businessName,
             nit: form.nit,
+            dv: form.dv || undefined,
             tradeName: form.tradeName || undefined,
             email: form.email || undefined,
             phone: form.phone || undefined,
@@ -191,6 +208,7 @@ export default function EmpresasAdminPage() {
             company: {
               businessName: form.businessName,
               nit: form.nit,
+              dv: form.dv || undefined,
               tradeName: form.tradeName || undefined,
               email: form.email || undefined,
               phone: form.phone || undefined,
@@ -223,41 +241,21 @@ export default function EmpresasAdminPage() {
 
       // Si estamos editando la empresa y llenaron los datos del admin
       if (editingId && (form.adminName || form.adminEmail || form.adminPassword)) {
-        if (editingAdminId) {
-          // Actualizar admin existente
-          const adminPayload: any = {};
-          if (form.adminName) adminPayload.name = form.adminName;
-          if (form.adminEmail) adminPayload.email = form.adminEmail;
-          if (form.adminPassword) adminPayload.password = form.adminPassword;
-          try {
-            await fetch(`${apiBase}users/${editingAdminId}`, {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              },
-              body: JSON.stringify(adminPayload),
-            });
-          } catch { /* ignorar error de admin */ }
-        } else {
-          // No había admin y llenaron los campos: crearlo
-          try {
-            await fetch(`${apiBase}users`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              },
-              body: JSON.stringify({
-                name: form.adminName,
-                email: form.adminEmail,
-                password: form.adminPassword || "123456", // requiere password
-                companyId: editingId,
-                roleIds: [] // El backend asume que le damos un rol? O default ADMIN?
-              }),
-            });
-          } catch { /* ignorar error de creación */ }
-        }
+        const adminPayload: any = {};
+        if (form.adminName) adminPayload.name = form.adminName;
+        if (form.adminEmail) adminPayload.email = form.adminEmail;
+        if (form.adminPassword) adminPayload.password = form.adminPassword;
+
+        try {
+          await fetch(`${apiBase}companies/${editingId}/admin`, {
+            method: editingAdminId ? "PUT" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(adminPayload),
+          });
+        } catch { /* ignorar error de admin */ }
       }
 
       toast.success(editingId ? "Empresa actualizada correctamente" : "Empresa creada correctamente");
@@ -296,6 +294,41 @@ export default function EmpresasAdminPage() {
     }
   };
 
+  // El listado solo trae los campos de registro (businessName, nit, dbName, active);
+  // los datos fiscales/branding (dv, tradeName, email, phone) viven en la BD del
+  // tenant, así que hay que pedir el detalle completo al abrir el modal de edición.
+  const openEditModal = async (company: Company) => {
+    setEditingId(company.id);
+    setEditingAdminId(null);
+    setForm({
+      ...emptyForm,
+      businessName: company.businessName,
+      nit: company.nit,
+    });
+    setIsModalOpen(true);
+    fetchCompanyAdmin(company.id);
+
+    try {
+      const token = getToken();
+      const res = await fetch(`${apiBase}companies/${company.id}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!res.ok) return;
+      const { data: full } = await res.json();
+      setForm((prev) => ({
+        ...prev,
+        businessName: full.businessName || prev.businessName,
+        nit: full.nit || prev.nit,
+        dv: full.dv || calcularDV(full.nit || prev.nit),
+        tradeName: full.tradeName || "",
+        email: full.email || "",
+        phone: full.phone || "",
+      }));
+    } catch (err) {
+      console.error("Error fetching company detail:", err);
+    }
+  };
+
   if (authorized === null) {
     return <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">Verificando acceso...</div>;
   }
@@ -308,9 +341,21 @@ export default function EmpresasAdminPage() {
         <p className="text-sm text-gray-500 max-w-sm">
           Esta sección es exclusiva para administradores de plataforma (SUPER_ADMIN).
         </p>
-        <Button onClick={() => router.push("/")} className="bg-blue-950 hover:bg-blue-800 text-white rounded-xl">
-          Volver al inicio
-        </Button>
+        <div className="flex gap-3">
+          <Button onClick={() => router.push("/")} className="bg-blue-950 hover:bg-blue-800 text-white rounded-xl">
+            Volver al inicio
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              logout();
+              router.replace("/");
+            }}
+            className="rounded-xl text-gray-500 hover:bg-gray-100"
+          >
+            Cerrar sesión
+          </Button>
+        </div>
       </div>
     );
   }
@@ -377,21 +422,7 @@ export default function EmpresasAdminPage() {
                           size="sm"
                           className="rounded-lg text-blue-600 hover:bg-blue-50"
                           title="Editar empresa"
-                          onClick={async () => {
-                            setEditingId(c.id);
-                            setEditingAdminId(null);
-                            setForm({
-                              ...emptyForm,
-                              businessName: c.businessName,
-                              nit: c.nit,
-                              tradeName: c.tradeName || "",
-                              email: c.email || "",
-                              phone: c.phone || "",
-                            });
-                            setIsModalOpen(true);
-                            // Cargar admin en paralelo
-                            fetchCompanyAdmin(c.id);
-                          }}
+                          onClick={() => openEditModal(c)}
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -433,7 +464,26 @@ export default function EmpresasAdminPage() {
                 <div className="md:col-span-2">
                   <Field label="Razón Social" id="businessName" icon={Building2} value={form.businessName} onChange={(v) => setForm({ ...form, businessName: v })} />
                 </div>
-                <Field label="NIT" id="nit" icon={Hash} value={form.nit} onChange={(v) => setForm({ ...form, nit: v })} />
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <Field
+                      label="NIT"
+                      id="nit"
+                      icon={Hash}
+                      value={form.nit}
+                      onChange={(v) => {
+                        const digits = v.replace(/\D/g, "");
+                        setForm({ ...form, nit: digits, dv: calcularDV(digits) });
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 w-16 shrink-0">
+                    <Label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1">DV</Label>
+                    <div className="h-12 rounded-xl border border-gray-200 bg-gray-50 flex items-center justify-center text-sm font-bold text-gray-700">
+                      {form.dv || "—"}
+                    </div>
+                  </div>
+                </div>
                 <Field label="Nombre comercial" id="tradeName" icon={Building2} value={form.tradeName} onChange={(v) => setForm({ ...form, tradeName: v })} />
                 <Field label="Correo" id="companyEmail" type="email" icon={Mail} value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
                 <Field label="Teléfono" id="phone" type="tel" icon={Phone} value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />

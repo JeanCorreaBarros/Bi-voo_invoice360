@@ -7,6 +7,8 @@ const router = express.Router()
 
 router.use(auth, requireTenant)
 
+router.get("/inventory/dashboard", controller.dashboard)
+
 router.get("/inventory/kardex/:productId", controller.kardex)
 
 router.get("/inventory/kardex", controller.kardexAll)

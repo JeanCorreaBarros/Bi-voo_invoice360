@@ -1,24 +1,27 @@
 "use client"
 
-import dynamic from "next/dynamic"
+import { useEffect, useState } from "react"
+import toast, { Toaster } from "react-hot-toast"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DashboardHeader } from "@/components/dashboard-header"
+import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { BookOpenIcon, HeadphonesIcon, MessageSquareIcon, SearchIcon } from 'lucide-react'
-import Link from "next/link"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
-import { useState } from "react"
-
+  LifeBuoy,
+  SearchIcon,
+  Ticket as TicketIcon,
+  Plus,
+  Clock,
+  CheckCircle2,
+  CircleDot,
+  XCircle,
+  AlertTriangle,
+  Sparkles,
+} from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -27,399 +30,368 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
 
+type Ticket = {
+  id: string
+  subject: string
+  description: string
+  type: string
+  priority: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED"
+  createdByName: string
+  createdByEmail: string
+  adminReply: string | null
+  createdAt: string
+}
+
+function getToken() {
+  try {
+    return sessionStorage.getItem("token")
+  } catch {
+    return null
+  }
+}
+
+const STATUS_META: Record<Ticket["status"], { label: string; className: string; icon: any }> = {
+  OPEN: { label: "Abierto", className: "bg-blue-100 text-blue-700", icon: CircleDot },
+  IN_PROGRESS: { label: "En proceso", className: "bg-amber-100 text-amber-700", icon: Clock },
+  RESOLVED: { label: "Resuelto", className: "bg-emerald-100 text-emerald-700", icon: CheckCircle2 },
+  CLOSED: { label: "Cerrado", className: "bg-gray-100 text-gray-500", icon: XCircle },
+}
+
+const PRIORITY_META: Record<Ticket["priority"], { label: string; className: string }> = {
+  LOW: { label: "Baja", className: "bg-gray-100 text-gray-600" },
+  MEDIUM: { label: "Media", className: "bg-blue-100 text-blue-700" },
+  HIGH: { label: "Alta", className: "bg-orange-100 text-orange-700" },
+  CRITICAL: { label: "Crítica", className: "bg-red-100 text-red-700" },
+}
+
+const FAQS = [
+  {
+    q: "¿Cómo puedo restablecer mi contraseña?",
+    a: "Haz clic en \"¿Olvidaste tu contraseña?\" en la pantalla de inicio de sesión. Recibirás un correo con instrucciones para crear una nueva contraseña.",
+  },
+  {
+    q: "¿Cómo puedo agregar un nuevo usuario al sistema?",
+    a: "Ve a Configuración > Usuarios > Nuevo Usuario. Completa la información requerida y asigna los permisos correspondientes.",
+  },
+  {
+    q: "¿Cómo puedo exportar mis reportes a Excel?",
+    a: "En cualquier reporte, busca los botones de descarga (PDF/Excel/ZIP). Selecciona el formato y el archivo se descargará automáticamente.",
+  },
+  {
+    q: "¿Cómo funciona el inventario y el kardex?",
+    a: "En el módulo de Inventario puedes ver existencias, ajustarlas manualmente y revisar el historial de movimientos (kardex) de cada producto.",
+  },
+]
+
+function StatusBadge({ status }: { status: Ticket["status"] }) {
+  const meta = STATUS_META[status]
+  const Icon = meta.icon
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${meta.className}`}>
+      <Icon className="h-3 w-3" /> {meta.label}
+    </span>
+  )
+}
+
+function PriorityBadge({ priority }: { priority: Ticket["priority"] }) {
+  const meta = PRIORITY_META[priority]
+  return <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${meta.className}`}>{meta.label}</span>
+}
 
 export default function SoportePage() {
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [loadingTickets, setLoadingTickets] = useState(true)
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  const [faqSearch, setFaqSearch] = useState("")
 
-  const [open, setOpen] = useState(false)
-  const [selectedTicket, setSelectedTicket] = useState<any>(null)
+  const [form, setForm] = useState({ subject: "", type: "", priority: "MEDIUM", description: "" })
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleOpenModal = (ticket: any) => {
-    setSelectedTicket(ticket)
-    setOpen(true)
+  const fetchTickets = async () => {
+    setLoadingTickets(true)
+    try {
+      const token = getToken()
+      const res = await fetch(`${apiBase}support-tickets`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) throw new Error(result?.message || "Error al cargar tickets")
+      setTickets(result.data)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al cargar tickets")
+    } finally {
+      setLoadingTickets(false)
+    }
   }
 
-  const tickets = [
-    {
-      id: "#12345",
-      subject: "Problema con la facturación electrónica y errores en los totales",
-      date: "18/03/2023",
-      status: "En proceso",
-      statusColor: "yellow",
-    },
-    {
-      id: "#12340",
-      subject: "Error al crear cita en el calendario principal",
-      date: "15/03/2023",
-      status: "Resuelto",
-      statusColor: "green",
-    },
-    {
-      id: "#12335",
-      subject: "Solicitud de nueva funcionalidad para reportes avanzados",
-      date: "10/03/2023",
-      status: "Abierto",
-      statusColor: "blue",
-    },
-  ]
+  useEffect(() => {
+    fetchTickets()
+  }, [])
+
+  const submitTicket = async () => {
+    if (!form.subject.trim() || !form.type || !form.description.trim()) {
+      toast.error("Completa asunto, tipo y descripción")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const token = getToken()
+      const res = await fetch(`${apiBase}support-tickets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+        body: JSON.stringify(form),
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) throw new Error(result?.message || "No se pudo crear el ticket")
+      toast.success("Ticket creado. Nuestro equipo lo revisará pronto.")
+      setForm({ subject: "", type: "", priority: "MEDIUM", description: "" })
+      fetchTickets()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo crear el ticket")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const filteredFaqs = FAQS.filter(
+    (f) =>
+      !faqSearch.trim() ||
+      f.q.toLowerCase().includes(faqSearch.toLowerCase()) ||
+      f.a.toLowerCase().includes(faqSearch.toLowerCase())
+  )
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col">
+      <Toaster position="top-right" />
       <DashboardHeader />
-      <main className="flex-1 overflow-y-auto p-9 ">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-2">Centro de Ayuda</h1>
-          <p className="text-gray-500 mb-8">
-            Centro de ayuda de PLC, impulsado por by power Bivoo.
-          </p>
 
-
-          <div className="bg-white shadow-xl rounded-xl p-8 shadow-sm mb-8 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100 rounded-full -mt-20 -mr-20 opacity-50"></div>
-            <div className="relative z-10">
-              <h2 className="text-xl font-bold mb-4">¿Cómo podemos ayudarte hoy?</h2>
-              <div className="relative max-w-xl">
+      <main className="flex-1 p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
+        <div className="max-w-5xl mx-auto space-y-6">
+          {/* Hero */}
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[hsl(209,79%,22%)] via-[hsl(209,79%,30%)] to-[hsl(217,85%,45%)] px-6 py-10 md:px-10 md:py-14 shadow-xl">
+            <div className="absolute -top-16 -right-16 w-64 h-64 bg-white/10 rounded-full blur-2xl" />
+            <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-white/5 rounded-full blur-3xl" />
+            <div className="relative z-10 max-w-2xl">
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-white/90 mb-4">
+                <Sparkles className="h-3.5 w-3.5" /> Centro de Ayuda
+              </div>
+              <h1 className="text-2xl md:text-3xl font-black text-white mb-2">¿Cómo podemos ayudarte hoy?</h1>
+              <p className="text-white/70 text-sm mb-6">Soporte de Invoice360, impulsado por Bi-voo.</p>
+              <div className="relative max-w-md">
+                <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input
-                  placeholder="Buscar en la base de conocimientos..."
-                  className="pl-10 py-6"
+                  placeholder="Buscar en preguntas frecuentes..."
+                  value={faqSearch}
+                  onChange={(e) => setFaqSearch(e.target.value)}
+                  className="h-12 pl-11 rounded-2xl border-0 shadow-lg bg-white text-gray-900"
                 />
-                <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Button className="absolute right-1 top-1/2 transform -translate-y-1/2">
-                  Buscar
-                </Button>
               </div>
             </div>
           </div>
 
-          <div className="hidden grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2">
-                  <BookOpenIcon className="h-5 w-5 text-blue-500" />
-                  Base de Conocimientos
-                </CardTitle>
-                <CardDescription>Artículos y tutoriales</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <ul className="space-y-2 text-sm">
-                  <li>
-                    <a href="#" className="text-blue-600 hover:underline">Primeros pasos con Bivoo</a>
-                  </li>
-                  <li>
-                    <a href="#" className="text-blue-600 hover:underline">Configuración de la agenda</a>
-                  </li>
-                  <li>
-                    <a href="#" className="text-blue-600 hover:underline">Gestión de inventario</a>
-                  </li>
-                  <li>
-                    <a href="#" className="text-blue-600 hover:underline">Facturación electrónica</a>
-                  </li>
-                  <li>
-                    <a href="#" className="text-blue-600 hover:underline">Reportes y estadísticas</a>
-                  </li>
-                </ul>
-              </CardContent>
-              <CardFooter>
-                <Button variant="outline" className="w-full">Ver todos los artículos</Button>
-              </CardFooter>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquareIcon className="h-5 w-5 text-green-500" />
-                  Chat en Vivo
-                </CardTitle>
-                <CardDescription>Habla con un agente</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-sm text-gray-500 mb-4">
-                  Nuestros agentes están disponibles para ayudarte en tiempo real con cualquier duda o problema.
-                </p>
-                <div className="flex items-center gap-2 text-sm text-green-600 mb-4">
-                  <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                  Agentes disponibles
-                </div>
-                <p className="text-xs text-gray-500">
-                  Horario de atención: Lunes a Viernes, 8:00 AM - 6:00 PM
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button className="w-full">Iniciar Chat</Button>
-              </CardFooter>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2">
-                  <HeadphonesIcon className="h-5 w-5 text-purple-500" />
-                  Soporte Telefónico
-                </CardTitle>
-                <CardDescription>Llámanos directamente</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-sm text-gray-500 mb-4">
-                  Si prefieres hablar con un agente por teléfono, puedes llamarnos a nuestras líneas de atención.
-                </p>
-                <div className="text-lg font-medium mb-2">+57 (1) 123 4567</div>
-                <p className="text-xs text-gray-500">
-                  Horario de atención: Lunes a Viernes, 8:00 AM - 6:00 PM
-                </p>
-              </CardContent>
-              <CardFooter>
-                <Button variant="outline" className="w-full">Solicitar Llamada</Button>
-              </CardFooter>
-            </Card>
-          </div>
-
-          <Tabs defaultValue="tickets" className="bg-white rounded-xl shadow-sm">
-            <TabsList className="w-full border-b rounded-none p-0">
-              <TabsTrigger value="tickets" className="flex-1 rounded-none py-3">Mis Tickets</TabsTrigger>
-              <TabsTrigger value="nuevo" className="flex-1 rounded-none py-3">Nuevo Ticket</TabsTrigger>
-              <TabsTrigger value="faq" className="flex-1 hidden md:block rounded-none py-3">Preguntas Frecuentes</TabsTrigger>
+          <Tabs defaultValue="tickets" className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <TabsList className="w-full border-b border-gray-100 rounded-none p-0 bg-gray-50/60 h-auto">
+              <TabsTrigger value="tickets" className="flex-1 rounded-none py-3.5 gap-2 data-[state=active]:bg-white">
+                <TicketIcon className="h-4 w-4" /> Mis Tickets
+              </TabsTrigger>
+              <TabsTrigger value="nuevo" className="flex-1 rounded-none py-3.5 gap-2 data-[state=active]:bg-white">
+                <Plus className="h-4 w-4" /> Nuevo Ticket
+              </TabsTrigger>
+              <TabsTrigger value="faq" className="flex-1 rounded-none py-3.5 gap-2 data-[state=active]:bg-white">
+                <LifeBuoy className="h-4 w-4" /> Preguntas Frecuentes
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="tickets" className="p-6">
-              <div className="overflow-x-auto shadow-lg">
-                <table className="w-full ">
-                  <thead>
-                    <tr className="text-left text-sm text-gray-500 border-b">
-                      <th className="pb-3 font-medium">Ticket ID</th>
-                      <th className="pb-3 font-medium">Asunto</th>
-                      <th className="pb-3 font-medium">Fecha</th>
-                      <th className="pb-3 font-medium">Estado</th>
-                      <th className="pb-3 font-medium">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <TooltipProvider>
-                      {tickets.map((ticket) => (
-                        <tr key={ticket.id} className="border-b last:border-b-0  cursor-pointer">
-                          <td className="py-3 text-purple-600 pr-5">{ticket.id}</td>
-
-                          {/* Asunto con truncado + tooltip */}
-                          <td className="py-3 max-w-[100px] md:max-w-[280px]">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <p className="truncate cursor-help">
-                                  {ticket.subject}
-                                </p>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-sm">
-                                {ticket.subject}
-                              </TooltipContent>
-                            </Tooltip>
-                          </td>
-
-                          <td className="py-3">{ticket.date}</td>
-
-                          <td className="py-3 px-5 max-w-[150px]">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs
-                                                                    ${ticket.statusColor === "yellow"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : ticket.statusColor === "green"
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-blue-100 text-blue-800"
-                                }`}
-                            >
-                              {ticket.status}
-                            </span>
-                          </td>
-
-                          <td className="py-3">
-                            <button
-                              onClick={() => handleOpenModal(ticket)}
-                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                            >
-                              Ver detalles
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </TooltipProvider>
-                  </tbody>
-
-                </table>
-              </div>
+              {loadingTickets ? (
+                <div className="py-16 text-center text-gray-400 text-sm">Cargando tickets...</div>
+              ) : tickets.length === 0 ? (
+                <div className="py-16 text-center">
+                  <TicketIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+                  <p className="text-sm text-gray-400">Aún no has creado ningún ticket de soporte</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {tickets.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setSelectedTicket(t)}
+                      className="w-full text-left bg-white border border-gray-100 hover:border-blue-200 hover:shadow-md rounded-2xl p-4 transition-all"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 truncate">{t.subject}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {new Date(t.createdAt).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })} · {t.type}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <PriorityBadge priority={t.priority} />
+                          <StatusBadge status={t.status} />
+                        </div>
+                      </div>
+                      {t.adminReply && (
+                        <p className="mt-2 text-xs text-emerald-700 bg-emerald-50 rounded-lg px-2.5 py-1.5 line-clamp-1">
+                          Respuesta del equipo: {t.adminReply}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="nuevo" className="p-6">
-              <div className="max-w-2xl mx-auto">
-                <h3 className="text-lg font-medium mb-4">Crear Nuevo Ticket de Soporte</h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label htmlFor="ticket-asunto" className="text-sm font-medium">Asunto</label>
-                    <Input id="ticket-asunto" placeholder="Describe brevemente tu problema" />
-                  </div>
+              <div className="max-w-2xl mx-auto space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">Crear Nuevo Ticket de Soporte</h3>
+                <p className="text-sm text-gray-500 -mt-2">
+                  Tu ticket llega directamente al equipo de soporte de Bi-voo.
+                </p>
 
-                  <div className="space-y-2 w-full">
-                    <label htmlFor="ticket-tipo" className="text-sm font-medium">Tipo de Problema</label>
-                    <Select>
-                      <SelectTrigger id="ticket-tipo" className="w-full">
-                        <SelectValue placeholder="Seleccionar tipo de problema" />
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Asunto</label>
+                  <Input
+                    placeholder="Describe brevemente tu problema"
+                    value={form.subject}
+                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Tipo de Problema</label>
+                    <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Seleccionar tipo" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="tecnico">Problema Técnico</SelectItem>
-                        <SelectItem value="facturacion">Problema de Facturación</SelectItem>
-                        <SelectItem value="cuenta">Problema con mi Cuenta</SelectItem>
-                        <SelectItem value="sugerencia">Sugerencia</SelectItem>
-                        <SelectItem value="otro">Otro</SelectItem>
+                        <SelectItem value="Problema Técnico">Problema Técnico</SelectItem>
+                        <SelectItem value="Problema de Facturación">Problema de Facturación</SelectItem>
+                        <SelectItem value="Problema con mi Cuenta">Problema con mi Cuenta</SelectItem>
+                        <SelectItem value="Sugerencia">Sugerencia</SelectItem>
+                        <SelectItem value="Otro">Otro</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <label htmlFor="ticket-prioridad" className="text-sm font-medium">Prioridad</label>
-                    <Select>
-                      <SelectTrigger id="ticket-prioridad" className="w-full">
+                    <label className="text-sm font-medium text-gray-700">Prioridad</label>
+                    <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="Seleccionar prioridad" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="baja">Baja</SelectItem>
-                        <SelectItem value="media">Media</SelectItem>
-                        <SelectItem value="alta">Alta</SelectItem>
-                        <SelectItem value="critica">Crítica</SelectItem>
+                        <SelectItem value="LOW">Baja</SelectItem>
+                        <SelectItem value="MEDIUM">Media</SelectItem>
+                        <SelectItem value="HIGH">Alta</SelectItem>
+                        <SelectItem value="CRITICAL">Crítica</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <label htmlFor="ticket-descripcion" className="text-sm font-medium">Descripción</label>
-                    <Textarea
-                      id="ticket-descripcion"
-                      placeholder="Describe detalladamente el problema que estás experimentando"
-                      rows={6}
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">Descripción</label>
+                  <Textarea
+                    placeholder="Describe detalladamente el problema que estás experimentando"
+                    rows={6}
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  />
+                </div>
 
-                  <div className="space-y-2">
-                    <label htmlFor="ticket-adjunto" className="text-sm font-medium">Adjuntar Archivos (opcional)</label>
-                    <div className="border-2 border-dashed rounded-md p-4 text-center">
-                      <p className="text-sm text-gray-500 mb-2">Arrastra y suelta archivos aquí o haz clic para seleccionar</p>
-                      <Button variant="outline" size="sm">Seleccionar Archivos</Button>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 flex justify-end">
-                    <Button>Enviar Ticket</Button>
-                  </div>
+                <div className="pt-2 flex justify-end">
+                  <Button
+                    onClick={submitTicket}
+                    disabled={submitting}
+                    className="bg-[hsl(209,79%,35%)] hover:bg-[hsl(209,79%,30%)] rounded-xl px-6"
+                  >
+                    {submitting ? "Enviando..." : "Enviar Ticket"}
+                  </Button>
                 </div>
               </div>
             </TabsContent>
 
             <TabsContent value="faq" className="p-6">
               <div className="max-w-3xl mx-auto">
-                <h3 className="text-lg font-medium mb-4">Preguntas Frecuentes</h3>
-
-                <div className="space-y-4">
-                  <div className="border rounded-md p-4">
-                    <h4 className="font-medium mb-2">¿Cómo puedo restablecer mi contraseña?</h4>
-                    <p className="text-sm text-gray-600">
-                      Para restablecer tu contraseña, haz clic en "¿Olvidaste tu contraseña?" en la pantalla de inicio de sesión.
-                      Recibirás un correo electrónico con instrucciones para crear una nueva contraseña.
-                    </p>
-                  </div>
-
-                  <div className="border rounded-md p-4">
-                    <h4 className="font-medium mb-2">¿Cómo puedo agregar un nuevo usuario al sistema?</h4>
-                    <p className="text-sm text-gray-600">
-                      Para agregar un nuevo usuario, ve a Configuración {'>'} Usuarios {'>'} Nuevo Usuario. Completa la información
-                      requerida y asigna los permisos correspondientes. El nuevo usuario recibirá un correo electrónico
-                      con instrucciones para acceder al sistema.
-                    </p>
-                  </div>
-
-                  <div className="border rounded-md p-4">
-                    <h4 className="font-medium mb-2">¿Cómo puedo configurar las notificaciones por correo electrónico?</h4>
-                    <p className="text-sm text-gray-600">
-                      Para configurar las notificaciones, ve a Configuración {'>'} Notificaciones. Allí podrás personalizar
-                      qué notificaciones deseas recibir y a través de qué canales (correo electrónico, SMS, etc.).
-                    </p>
-                  </div>
-
-                  <div className="border rounded-md p-4">
-                    <h4 className="font-medium mb-2">¿Cómo puedo exportar mis reportes a Excel?</h4>
-                    <p className="text-sm text-gray-600">
-                      En cualquier reporte, busca el botón "Exportar" o el ícono de descarga en la esquina superior derecha.
-                      Selecciona "Excel" como formato de exportación y el archivo se descargará automáticamente.
-                    </p>
-                  </div>
-
-                  <div className="border rounded-md p-4">
-                    <h4 className="font-medium mb-2">¿Cómo puedo configurar mi impresora para imprimir facturas?</h4>
-                    <p className="text-sm text-gray-600">
-                      Ve a Configuración {'>'} Facturación {'>'} Impresión. Allí podrás seleccionar tu impresora predeterminada
-                      y configurar el formato de impresión para tus facturas y otros documentos.
-                    </p>
-                  </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Preguntas Frecuentes</h3>
+                <div className="space-y-3">
+                  {filteredFaqs.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-8">Sin resultados para "{faqSearch}"</p>
+                  ) : (
+                    filteredFaqs.map((f) => (
+                      <div key={f.q} className="border border-gray-100 rounded-xl p-4">
+                        <h4 className="font-semibold text-gray-800 mb-1.5 text-sm">{f.q}</h4>
+                        <p className="text-sm text-gray-500">{f.a}</p>
+                      </div>
+                    ))
+                  )}
                 </div>
-
                 <div className="mt-6 text-center">
-                  <p className="text-sm text-gray-500 mb-2">¿No encuentras respuesta a tu pregunta?</p>
-                  {/*<Button variant="outline">Ver todas las preguntas frecuentes</Button>*/}
+                  <p className="text-sm text-gray-500">¿No encuentras respuesta a tu pregunta? Crea un ticket en la pestaña anterior.</p>
                 </div>
               </div>
             </TabsContent>
           </Tabs>
         </div>
       </main>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <MobileBottomNav />
+
+      <Dialog open={!!selectedTicket} onOpenChange={(open) => { if (!open) setSelectedTicket(null) }}>
         <DialogContent className="max-w-lg bg-white">
           {selectedTicket && (
             <>
               <DialogHeader>
-                <DialogTitle>Detalles del Ticket</DialogTitle>
-                <DialogDescription>
-                  Información completa del ticket seleccionado
-                </DialogDescription>
+                <DialogTitle>{selectedTicket.subject}</DialogTitle>
+                <DialogDescription>Ticket #{selectedTicket.id.slice(-8).toUpperCase()}</DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Ticket ID</span>
-                  <span className="font-medium">{selectedTicket.id}</span>
-                </div>
-
-                <div>
-                  <span className="text-gray-500 block mb-1">Asunto</span>
-                  <p className="font-medium">{selectedTicket.subject}</p>
-                </div>
-
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Fecha</span>
-                  <span>{selectedTicket.date}</span>
-                </div>
-
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <span className="text-gray-500">Estado</span>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs
-                ${selectedTicket.statusColor === "yellow"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : selectedTicket.statusColor === "green"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-blue-100 text-blue-800"
-                      }`}
-                  >
-                    {selectedTicket.status}
-                  </span>
+                  <StatusBadge status={selectedTicket.status} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Prioridad</span>
+                  <PriorityBadge priority={selectedTicket.priority} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Tipo</span>
+                  <span className="font-medium text-gray-800">{selectedTicket.type}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-500">Fecha</span>
+                  <span className="text-gray-800">{new Date(selectedTicket.createdAt).toLocaleString("es-CO")}</span>
                 </div>
 
-                {/* Placeholder para descripción real */}
                 <div>
                   <span className="text-gray-500 block mb-1">Descripción</span>
-                  <p className="text-gray-600">
-                    Aquí puedes mostrar la descripción completa del ticket cuando venga desde el backend.
-                  </p>
+                  <p className="text-gray-700 whitespace-pre-wrap bg-gray-50 rounded-xl p-3">{selectedTicket.description}</p>
                 </div>
+
+                {selectedTicket.adminReply ? (
+                  <div>
+                    <span className="text-gray-500 block mb-1 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Respuesta del equipo de soporte
+                    </span>
+                    <p className="text-emerald-800 whitespace-pre-wrap bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                      {selectedTicket.adminReply}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-gray-400 bg-gray-50 rounded-xl p-3">
+                    <AlertTriangle className="h-4 w-4" />
+                    <span>Aún sin respuesta del equipo de soporte</span>
+                  </div>
+                )}
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
-
     </div>
-
   )
 }

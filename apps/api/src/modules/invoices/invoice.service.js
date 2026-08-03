@@ -1,4 +1,6 @@
-export async function createInvoice(db, data, tenantId) {
+import { causeInvoiceSale } from '../../lib/accountingHooks.js'
+
+export async function createInvoice(db, data) {
   return db.$transaction(async (tx) => {
 
     let totalBeforeTax = 0
@@ -7,7 +9,7 @@ export async function createInvoice(db, data, tenantId) {
 
     const productsCache = []
 
-    // 0️⃣ VALIDAR USUARIO (debe pertenecer a esta misma empresa)
+    // 0️⃣ VALIDAR USUARIO (la conexión ya está scopeada a esta empresa)
     const user = await tx.user.findUnique({
       where: { id: data.userId }
     })
@@ -15,16 +17,13 @@ export async function createInvoice(db, data, tenantId) {
     if (!user)
       throw new Error("Usuario no existe")
 
-    if (user.companyId !== tenantId)
-      throw new Error("El usuario no pertenece a esta empresa")
-
     if (data.sellerId) {
       const seller = await tx.user.findUnique({
         where: { id: data.sellerId }
       })
 
-      if (!seller || seller.companyId !== tenantId)
-        throw new Error("El vendedor no pertenece a esta empresa")
+      if (!seller)
+        throw new Error("El vendedor no existe")
     }
 
     // 1️⃣ VALIDAR ITEMS Y CALCULAR
@@ -200,6 +199,7 @@ export async function createInvoice(db, data, tenantId) {
     // 6️⃣ DESCONTAR STOCK + MOVIMIENTO
     // ===============================
 
+    const defaultWarehouse = await tx.warehouse.findFirst({ where: { isDefault: true } })
 
     for (const item of productsCache) {
 
@@ -218,11 +218,29 @@ export async function createInvoice(db, data, tenantId) {
             type: "SALE",
             quantity: item.quantity,
             reference: "INVOICE",
-            referenceId: invoice.id
+            referenceId: invoice.id,
+            warehouseId: defaultWarehouse?.id
           }
         })
       }
     }
+
+    // ===============================
+    // 6️⃣.5 CAUSACIÓN CONTABLE AUTOMÁTICA (si el evento está activo)
+    // ===============================
+
+    const costOfGoods = productsCache
+      .filter((item) => item.product.type !== "SERVICE")
+      .reduce((sum, item) => sum + Number(item.product.cost || 0) * item.quantity, 0)
+
+    await causeInvoiceSale(tx, {
+      invoiceId: invoice.id,
+      date: orderDateObj,
+      userId: data.userId,
+      subtotal: totalBeforeTax,
+      tax: totalTax,
+      costOfGoods
+    })
 
     // ===============================
     // 6️⃣ RETORNAR FACTURA COMPLETA
@@ -231,7 +249,6 @@ export async function createInvoice(db, data, tenantId) {
     const fullInvoice = await tx.invoice.findUnique({
       where: { id: invoice.id },
       include: {
-        company: true,
         details: {
           include: {
             product: true
@@ -315,7 +332,6 @@ export async function updateInvoice(db, id, data) {
         where: { id },
         data: updateData,
         include: {
-          company: true,
           details: {
             include: { product: true }
           }
@@ -517,6 +533,8 @@ export async function updateInvoice(db, id, data) {
     // 8️⃣ DESCONTAR STOCK NUEVO
     // =====================================
 
+    const defaultWarehouseUpdate = await tx.warehouse.findFirst({ where: { isDefault: true } })
+
     for (const item of productsCache) {
 
       if (item.product.type !== "SERVICE") {
@@ -534,7 +552,8 @@ export async function updateInvoice(db, id, data) {
             type: "SALE",
             quantity: item.quantity,
             reference: "INVOICE-UPDATE",
-            referenceId: id
+            referenceId: id,
+            warehouseId: defaultWarehouseUpdate?.id
           }
         })
       }
@@ -547,7 +566,6 @@ export async function updateInvoice(db, id, data) {
     return await tx.invoice.findUnique({
       where: { id },
       include: {
-        company: true,
         details: {
           include: { product: true }
         }

@@ -5,7 +5,8 @@ import {
   confirm,
   cancel,
   list,
-  getById
+  getById,
+  exportExcel
 } from './purchase.controller.js'
 
 import { auth } from '../../middlewares/auth.middleware.js'
@@ -41,6 +42,8 @@ router.patch(
 )
 
 router.get('/', list)
+
+router.get('/export/excel', exportExcel)
 
 router.get('/:id', getById)
 

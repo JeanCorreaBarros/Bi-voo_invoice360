@@ -45,14 +45,17 @@ export async function generateInvoicePDF(db, invoiceId, style = 'modern') {
         include: {
           product: true
         }
-      },
-      company: true
+      }
     }
   })
 
   if (!invoice) {
     throw new Error('Factura no encontrada')
   }
+
+  // Los datos de la empresa ya no son una relación del Invoice (multi-tenant:
+  // la BD misma es la empresa) — viven en la fila única CompanyProfile.
+  invoice.company = await db.companyProfile.findFirst()
 
   const doc = new PDFDocument({
     size: 'LETTER',
@@ -112,14 +115,17 @@ export async function generateInvoicePDFBuffer(db, invoiceId, style = 'modern') 
     include: {
       details: {
         include: { product: true }
-      },
-      company: true
+      }
     }
   })
 
   if (!invoice) {
     throw new Error('Factura no encontrada')
   }
+
+  // Los datos de la empresa ya no son una relación del Invoice (multi-tenant:
+  // la BD misma es la empresa) — viven en la fila única CompanyProfile.
+  invoice.company = await db.companyProfile.findFirst()
 
   const doc = new PDFDocument({
     size: 'LETTER',

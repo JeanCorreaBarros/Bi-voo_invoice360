@@ -11,7 +11,7 @@
 @layer base {
   :root {
     /* Light scheme inspired by the image: white background, navy headings, red accents, purple highlights */
-    --background: #ffffff;
+    --background: 0 0% 100%;
     --foreground: 222 15% 10%; /* navy/dark text */
     --card: 260 20% 98%; /* very light purple/near-white cards */
     --card-foreground: 222 15% 10%;
@@ -71,6 +71,36 @@
   animation: slideInFromLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Animaciones del orbe del chat flotante (Voix) */
+@keyframes orb-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8%); }
+}
+@keyframes orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.96); }
+}
+@keyframes orb-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-7deg); }
+  75% { transform: rotate(7deg); }
+}
+@keyframes orb-blink {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.1); }
+}
+@keyframes orb-wave {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-15%, -35%) scale(1.15); }
+  50% { transform: translate(10%, -15%) scale(0.9); }
+  75% { transform: translate(-8%, -25%) scale(1.1); }
+}
+@keyframes orb-zzz {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-16px) scale(1.15); }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -109,6 +139,22 @@
     max-width: 100% !important;
     min-height: 0 !important;
     margin: 0;
+    box-shadow: none !important;
+  }
+  #comprobante-print,
+  #comprobante-print * {
+    visibility: visible;
+  }
+  #comprobante-print {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    width: 100%;
+    height: auto;
+    max-width: 100% !important;
+    min-height: 0 !important;
+    margin: 0;
+    padding: 24px;
     box-shadow: none !important;
   }
 }

@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-export const getRoles = async () => {
-  return await prisma.role.findMany({
+// Role/Permission viven en la BD del tenant (se duplican por empresa).
+export const getRoles = async (db) => {
+  return await db.role.findMany({
     include: {
       permissions: {
         include: {
@@ -17,8 +14,8 @@ export const getRoles = async () => {
   });
 };
 
-export const getPermissions = async () => {
-  return await prisma.permission.findMany({
+export const getPermissions = async (db) => {
+  return await db.permission.findMany({
     orderBy: {
       code: 'asc'
     }

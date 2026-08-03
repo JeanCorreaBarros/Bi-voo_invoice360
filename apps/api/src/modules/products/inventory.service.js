@@ -1,4 +1,4 @@
-export async function moveStock(db, { productId, type, quantity, reason }) {
+export async function moveStock(db, { productId, type, quantity, reason, warehouseId }) {
   const product = await db.product.findUnique({
     where: { id: productId }
   })
@@ -16,13 +16,15 @@ export async function moveStock(db, { productId, type, quantity, reason }) {
   }
   if (type === 'ADJUST') newStock = quantity
 
+  const resolvedWarehouseId = warehouseId || (await db.warehouse.findFirst({ where: { isDefault: true } }))?.id
+
   return db.$transaction([
     db.product.update({
       where: { id: productId },
       data: { stock: newStock }
     }),
     db.inventoryMovement.create({
-      data: { productId, type, quantity, reason }
+      data: { productId, type, quantity, reason, warehouseId: resolvedWarehouseId }
     })
   ])
 }

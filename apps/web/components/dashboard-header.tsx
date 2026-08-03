@@ -5,11 +5,14 @@ import { useAuth } from "@/lib/auth-context"
 import { useRouter, usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 
+import { useTheme } from "next-themes"
+
 import {
   FileText,
   CreditCard,
   ShoppingCart,
   Calculator,
+  BookOpen,
   LogOut,
   ChevronDown,
   Menu,
@@ -18,20 +21,23 @@ import {
   Settings,
   HelpCircle,
   Users,
-  FolderOpen,
   ChevronRight,
   DollarSign,
   Building2,
   Palette,
   Rocket,
   User,
+  Moon,
+  Sun,
+  Boxes,
+  LifeBuoy,
 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -41,16 +47,18 @@ import {
 ───────────────────────────────────────────── */
 const navItems = [
   { icon: FileText, label: "Facturas", section: "principal", href: "/" },
-  { icon: ShoppingCart, label: "Compras", section: "principal", href: "/compras" },
+  { icon: ShoppingCart, label: "Compras", section: "gestion", href: "/compras" },
+  { icon: BookOpen, label: "Contabilidad", section: "principal", href: "/contabilidad", permission: "accounting.entry.read" },
+  { icon: Boxes, label: "Inventario", section: "principal", href: "/inventario" },
   { icon: DollarSign, label: "Cartera", section: "gestion", href: "/cartera" },
   { icon: BarChart3, label: "Reportes", section: "gestion", href: "/reportes" },
   { icon: Users, label: "Clientes", section: "gestion", href: "/clientes" },
-  { icon: FolderOpen, label: "Productos", section: "gestion", href: "/productos" },
   { icon: Calculator, label: "Proveedores", section: "gestion", href: "/proveedores" },
   { icon: CreditCard, label: "Usuarios", section: "gestion", href: "/usuarios" },
   { icon: Settings, label: "Configuración", section: "otros", href: "/configuracion" },
   { icon: HelpCircle, label: "Centro de Ayuda", section: "otros", href: "/ayuda" },
   { icon: Building2, label: "Empresas", section: "otros", href: "/admin/empresas", permission: "company.manage" },
+  { icon: LifeBuoy, label: "Soporte", section: "otros", href: "/admin/soporte", permission: "company.manage" },
   { icon: Palette, label: "Diseño login", section: "otros", href: "/admin/login-design", permission: "company.manage" },
 ]
 
@@ -206,7 +214,7 @@ function DesktopSidebar({
                     {user?.name || "Usuario"}
                   </span>
                   <span className="text-[11px] text-[hsl(228,5%,45%)]">
-                    {user?.role || "Rol"}
+                    {user?.roles?.[0] || "Rol"}
                   </span>
                 </div>
                 <ChevronRight className="h-4 w-4 text-[hsl(228,5%,35%)] shrink-0" />
@@ -235,9 +243,14 @@ export function DashboardHeader() {
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isActive = useIsActive()
+  const { theme, setTheme } = useTheme()
+  const [mountedTheme, setMountedTheme] = useState(false)
+  useEffect(() => { setMountedTheme(true) }, [])
+  const isDark = mountedTheme && theme === "dark"
 
   const handleNavigation = (href: string) => router.push(href)
   const handleLogout = () => { logout(); router.push("/") }
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@plasticoslc.com"
 
   return (
     <>
@@ -269,7 +282,11 @@ export function DashboardHeader() {
             {/* Desktop inline nav */}
             <nav className="hidden lg:flex items-center gap-1 ml-4" aria-label="Navegación principal">
               {navItems
-                .filter((item) => item.section === "principal")
+                .filter(
+                  (item) =>
+                    item.section === "principal" &&
+                    (!item.permission || user?.permissions?.includes(item.permission))
+                )
                 .map((item) => {
                   const active = isActive(item.href)
                   return (
@@ -304,18 +321,51 @@ export function DashboardHeader() {
                   <ChevronDown className="h-3 w-3 text-white/70" />
                 </div>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleNavigation("/perfil")} className="cursor-pointer">
-                  <User className="mr-2 h-4 w-4" />
-                  <span>Mi Perfil</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Cerrar Sesión</span>
-                </DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-64 p-0 overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3.5 bg-[hsl(209,79%,35%,0.06)]">
+                  <div className="w-10 h-10 rounded-full bg-[hsl(209,79%,35%)] flex items-center justify-center shrink-0">
+                    <span className="text-white text-sm font-bold">
+                      {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{user?.name || "Usuario"}</p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email || ""}</p>
+                  </div>
+                </div>
+                <div className="p-1.5">
+                  <DropdownMenuItem onClick={() => handleNavigation("/perfil")} className="cursor-pointer rounded-lg">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Mi Perfil</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNavigation("/configuracion")} className="cursor-pointer rounded-lg">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Configuración</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => { window.location.href = `mailto:${supportEmail}` }}
+                    className="cursor-pointer rounded-lg"
+                  >
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    <span>Centro de Ayuda</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <div className="flex items-center justify-between px-2 py-2">
+                    <span className="flex items-center gap-2 text-sm text-gray-700">
+                      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                      Modo Oscuro
+                    </span>
+                    <Switch
+                      checked={isDark}
+                      onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                    />
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer rounded-lg text-red-600 focus:text-red-600 focus:bg-red-50">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Cerrar Sesión</span>
+                  </DropdownMenuItem>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -495,7 +545,7 @@ export function MobileBottomNav() {
                     <span className="text-sm text-white font-semibold truncate leading-tight">
                       {user?.name || "Usuario"}
                     </span>
-                    <span className="text-[11px] text-[hsl(228,5%,45%)]">{user?.role || "Rol"}</span>
+                    <span className="text-[11px] text-[hsl(228,5%,45%)]">{user?.roles?.[0] || "Rol"}</span>
                   </div>
                   <ChevronRight className="h-4 w-4 text-[hsl(228,5%,35%)] shrink-0" />
                 </div>

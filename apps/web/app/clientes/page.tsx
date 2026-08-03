@@ -176,7 +176,7 @@ export default function ClientesPage() {
     setLoading(true);
     try {
       const token = getToken();
-      const res = await fetch(`${apiBase}/customers`, {
+      const res = await fetch(`${apiBase}customers`, {
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (!res.ok) return;
@@ -192,7 +192,7 @@ export default function ClientesPage() {
   const handleCreateClient = async () => {
     try {
       const token = getToken();
-      const res = await fetch(`${apiBase}/customers`, {
+      const res = await fetch(`${apiBase}customers`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(newClient),
@@ -211,7 +211,7 @@ export default function ClientesPage() {
     setIsLoadingEditData(true);
     try {
       const token = getToken();
-      const res = await fetch(`${apiBase}/customers/${client.id}`, {
+      const res = await fetch(`${apiBase}customers/${client.id}`, {
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (!res.ok) { toast.error("Error al cargar datos"); return; }
@@ -225,7 +225,7 @@ export default function ClientesPage() {
     if (!selectedCliente) return;
     try {
       const token = getToken();
-      const res = await fetch(`${apiBase}/customers/${selectedCliente.id}`, {
+      const res = await fetch(`${apiBase}customers/${selectedCliente.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(editClient),
@@ -241,7 +241,7 @@ export default function ClientesPage() {
     if (!selectedCliente) return;
     try {
       const token = getToken();
-      const res = await fetch(`${apiBase}/customers/${selectedCliente.id}`, {
+      const res = await fetch(`${apiBase}customers/${selectedCliente.id}`, {
         method: "DELETE",
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
@@ -257,7 +257,7 @@ export default function ClientesPage() {
     try {
       const token = getToken();
       const endpoint = cliente.active ? "deactivate" : "activate";
-      const res = await fetch(`${apiBase}/customers/${cliente.id}/${endpoint}`, {
+      const res = await fetch(`${apiBase}customers/${cliente.id}/${endpoint}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });

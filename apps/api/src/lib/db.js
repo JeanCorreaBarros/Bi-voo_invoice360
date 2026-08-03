@@ -1,0 +1,108 @@
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import pg from 'pg'
+import { PrismaClient as PlatformPrismaClient } from '../generated/platform/index.js'
+import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const TENANT_SCHEMA_PATH = path.resolve(__dirname, '../../prisma/tenant/schema.prisma')
+// Invocamos el entrypoint JS del CLI de Prisma directamente con `node` (en vez
+// del wrapper node_modules/.bin/prisma.cmd) para no depender de shell:true en
+// Windows, que rompe con rutas que tienen espacios.
+const PRISMA_CLI_ENTRY = path.resolve(__dirname, '../../node_modules/prisma/build/index.js')
+
+const execFileAsync = promisify(execFile)
+
+// Cliente único a la BD de control-plane (registro de empresas + cuentas de plataforma).
+export const platformDb = new PlatformPrismaClient()
+
+// companyId -> TenantPrismaClient conectado a la BD física de esa empresa.
+const tenantClientCache = new Map()
+
+function buildTenantUrl(dbName) {
+  const { TENANT_DB_HOST, TENANT_DB_PORT, TENANT_DB_USER, TENANT_DB_PASSWORD } = process.env
+  return `postgresql://${TENANT_DB_USER}:${TENANT_DB_PASSWORD}@${TENANT_DB_HOST}:${TENANT_DB_PORT}/${dbName}?schema=public`
+}
+
+/**
+ * Devuelve (o crea y cachea) el PrismaClient conectado a la BD física
+ * de la empresa `companyId`. No hay filtrado de datos: el aislamiento
+ * es la conexión misma.
+ */
+export async function getTenantClient(companyId) {
+  if (!companyId) {
+    throw new Error('getTenantClient requiere un companyId')
+  }
+
+  if (tenantClientCache.has(companyId)) {
+    return tenantClientCache.get(companyId)
+  }
+
+  const company = await platformDb.company.findUnique({ where: { id: companyId } })
+  if (!company || !company.active) {
+    throw new Error('Empresa no encontrada o inactiva')
+  }
+
+  const client = new TenantPrismaClient({
+    datasources: { db: { url: buildTenantUrl(company.dbName) } }
+  })
+
+  tenantClientCache.set(companyId, client)
+  return client
+}
+
+// Usado durante el provisioning, antes de que exista una fila Company en platform.
+export function getTenantClientByDbName(dbName) {
+  return new TenantPrismaClient({
+    datasources: { db: { url: buildTenantUrl(dbName) } }
+  })
+}
+
+async function withAdminClient(fn) {
+  const client = new pg.Client({ connectionString: process.env.POSTGRES_ADMIN_URL })
+  await client.connect()
+  try {
+    return await fn(client)
+  } finally {
+    await client.end()
+  }
+}
+
+// Nombres de BD Postgres válidos: minúsculas/dígitos/guion bajo, empieza con letra.
+const DB_NAME_PATTERN = /^[a-z][a-z0-9_]{2,58}$/
+
+/**
+ * Crea la BD física de una empresa nueva y le aplica las migraciones
+ * del schema tenant. No es transaccional con la BD platform: si falla
+ * después de crear la BD, el llamador debe invocar dropTenantDatabase.
+ */
+export async function provisionTenantDatabase(dbName) {
+  if (!DB_NAME_PATTERN.test(dbName)) {
+    throw new Error(`Nombre de base de datos inválido: ${dbName}`)
+  }
+
+  await withAdminClient(async (client) => {
+    await client.query(`CREATE DATABASE "${dbName}"`)
+  })
+
+  await execFileAsync(
+    process.execPath,
+    [PRISMA_CLI_ENTRY, 'migrate', 'deploy', `--schema=${TENANT_SCHEMA_PATH}`],
+    { env: { ...process.env, DATABASE_URL: buildTenantUrl(dbName) } }
+  )
+}
+
+// Limpieza best-effort cuando falla algún paso posterior a CREATE DATABASE.
+export async function dropTenantDatabase(dbName) {
+  if (!DB_NAME_PATTERN.test(dbName)) return
+
+  await withAdminClient(async (client) => {
+    await client.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [dbName]
+    )
+    await client.query(`DROP DATABASE IF EXISTS "${dbName}"`)
+  })
+}

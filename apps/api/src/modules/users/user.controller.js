@@ -3,11 +3,7 @@ import * as userService from './user.service.js'
 
 export async function createUser(req, res) {
   try {
-    const targetCompanyId = req.tenantId === null && req.body.companyId 
-      ? req.body.companyId 
-      : req.tenantId
-
-    const user = await userService.createUser(targetCompanyId, req.body)
+    const user = await userService.createUser(req.db, req.tenantId, req.body)
     res.status(201).json(user)
   } catch (error) {
     res.status(400).json({ message: error.message })
@@ -16,7 +12,7 @@ export async function createUser(req, res) {
 
 export async function updateUser(req, res) {
   try {
-    const user = await userService.updateUser(req.tenantId, req.params.id, req.body)
+    const user = await userService.updateUser(req.db, req.tenantId, req.params.id, req.body)
     res.json(user)
   } catch (error) {
     res.status(400).json({ message: error.message })
@@ -25,7 +21,7 @@ export async function updateUser(req, res) {
 
 export async function changePassword(req, res) {
   try {
-    await userService.changePassword(req.tenantId, req.params.id, req.body.newPassword)
+    await userService.changePassword(req.db, req.params.id, req.body.newPassword)
     res.json({ message: 'Password updated successfully' })
   } catch (error) {
     res.status(400).json({ message: error.message })
@@ -34,7 +30,7 @@ export async function changePassword(req, res) {
 
 export async function toggleUser(req, res) {
   try {
-    const user = await userService.toggleUser(req.tenantId, req.params.id)
+    const user = await userService.toggleUser(req.db, req.params.id)
     res.json(user)
   } catch (error) {
     res.status(400).json({ message: error.message })
@@ -46,12 +42,7 @@ export async function listUsers(req, res) {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
 
-    // Si es SUPER_ADMIN (tenantId es null) y envían companyId, usar ese.
-    const targetCompanyId = req.tenantId === null && req.query.companyId 
-      ? req.query.companyId 
-      : req.tenantId
-
-    const result = await userService.listUsers(targetCompanyId, page, limit)
+    const result = await userService.listUsers(req.db, page, limit)
 
     res.json(result)
   } catch (error) {

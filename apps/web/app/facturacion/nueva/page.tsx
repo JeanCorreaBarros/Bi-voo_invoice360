@@ -1,6 +1,13 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { useAiEvent } from "@/hooks/use-ai-event"
+import { AiSuggestButton } from "@/components/ai-suggest-button"
+
+// Debe coincidir con el prompt por defecto del catálogo en
+// apps/web/app/configuracion/page.tsx (AI_EVENTS).
+const DEFAULT_PROMPT_CLASIFICACION_INGRESO =
+    "Analiza la descripción del producto o servicio facturado y sugiere la cuenta contable de ingresos más adecuada del Plan de Cuentas."
 // ...existing code...
 
 interface Product {
@@ -98,6 +105,8 @@ export default function NuevaFacturaPage() {
     ];
 
     const [showProductDropdown, setShowProductDropdown] = useState<number | null>(null); // index del item que muestra el dropdown
+    const [itemAiSuggestions, setItemAiSuggestions] = useState<Record<number, string>>({})
+    const aiClasificacionIngreso = useAiEvent("fact_clasificacion_ingreso", DEFAULT_PROMPT_CLASIFICACION_INGRESO)
     const [currentStep, setCurrentStep] = useState(1); // 1: Datos, 2: Ítems, 3: Resumen
     const [items, setItems] = useState<InvoiceItem[]>([
         {
@@ -1592,6 +1601,29 @@ export default function NuevaFacturaPage() {
                                                     placeholder="Añadir nota..."
                                                     onChange={(e) => updateItem(item.id, "descripcion", e.target.value)}
                                                 />
+                                                {aiClasificacionIngreso.enabled && item.referencia && (
+                                                    <div className="mt-1.5">
+                                                        <AiSuggestButton
+                                                            label="Sugerir cuenta"
+                                                            prompt={aiClasificacionIngreso.prompt}
+                                                            context={`${item.referencia} ${item.descripcion || ""}`.trim()}
+                                                            onResult={(text) => setItemAiSuggestions((prev) => ({ ...prev, [item.id]: text }))}
+                                                            className="h-7 text-xs px-2"
+                                                        />
+                                                        {itemAiSuggestions[item.id] && (
+                                                            <p className="relative text-xs text-blue-600 mt-1 pr-5">
+                                                                {itemAiSuggestions[item.id]}
+                                                                <button
+                                                                    onClick={() => setItemAiSuggestions((prev) => { const next = { ...prev }; delete next[item.id]; return next })}
+                                                                    aria-label="Cerrar"
+                                                                    className="absolute top-0 right-0 opacity-60 hover:opacity-100"
+                                                                >
+                                                                    <X className="h-3 w-3" />
+                                                                </button>
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="py-4 px-2">
                                                 <input
@@ -1740,6 +1772,29 @@ export default function NuevaFacturaPage() {
                                             onChange={(e) => updateItem(item.id, "descripcion", e.target.value)}
                                             placeholder="Detalles adicionales..."
                                         />
+                                        {aiClasificacionIngreso.enabled && item.referencia && (
+                                            <div className="mt-1.5">
+                                                <AiSuggestButton
+                                                    label="Sugerir cuenta"
+                                                    prompt={aiClasificacionIngreso.prompt}
+                                                    context={`${item.referencia} ${item.descripcion || ""}`.trim()}
+                                                    onResult={(text) => setItemAiSuggestions((prev) => ({ ...prev, [item.id]: text }))}
+                                                    className="h-7 text-xs px-2"
+                                                />
+                                                {itemAiSuggestions[item.id] && (
+                                                    <p className="relative text-xs text-blue-600 mt-1 pr-5">
+                                                        {itemAiSuggestions[item.id]}
+                                                        <button
+                                                            onClick={() => setItemAiSuggestions((prev) => { const next = { ...prev }; delete next[item.id]; return next })}
+                                                            aria-label="Cerrar"
+                                                            className="absolute top-0 right-0 opacity-60 hover:opacity-100"
+                                                        >
+                                                            <X className="h-3 w-3" />
+                                                        </button>
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="flex justify-between items-center pt-2 border-t mt-1">

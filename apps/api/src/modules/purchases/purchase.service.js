@@ -1,4 +1,6 @@
-export const createPurchase = async (db, data) => {
+import { causePurchase } from '../../lib/accountingHooks.js'
+
+export const createPurchase = async (db, data, userId) => {
 
   return db.$transaction(async (tx) => {
 
@@ -47,6 +49,8 @@ export const createPurchase = async (db, data) => {
       }
     })
 
+    const defaultWarehouse = await tx.warehouse.findFirst({ where: { isDefault: true } })
+
     for (const item of productsCache) {
 
       await tx.purchaseDetail.create({
@@ -76,10 +80,20 @@ export const createPurchase = async (db, data) => {
           type: "PURCHASE",
           quantity: item.quantity,
           reference: "PURCHASE",
-          referenceId: purchase.id
+          referenceId: purchase.id,
+          warehouseId: defaultWarehouse?.id
         }
       })
     }
+
+    // CAUSACIÓN CONTABLE AUTOMÁTICA (si el evento está activo)
+    await causePurchase(tx, {
+      purchaseId: purchase.id,
+      date: purchase.date,
+      userId,
+      subtotal,
+      tax
+    })
 
     return purchase
   })
@@ -164,6 +178,8 @@ export const cancelPurchase = async (db, id) => {
       throw new Error('La compra ya está cancelada')
 
     // 🔥 Revertir inventario
+    const defaultWarehouseCancel = await tx.warehouse.findFirst({ where: { isDefault: true } })
+
     for (const detail of purchase.details) {
 
       await tx.product.update({
@@ -181,7 +197,8 @@ export const cancelPurchase = async (db, id) => {
           type: 'ADJUSTMENT',
           quantity: Number(detail.quantity),
           reference: 'PURCHASE_CANCEL',
-          referenceId: purchase.id
+          referenceId: purchase.id,
+          warehouseId: defaultWarehouseCancel?.id
         }
       })
     }
@@ -215,6 +232,8 @@ export const updatePurchase = async (db, id, data) => {
       throw new Error('Solo se puede editar compras en estado DRAFT')
 
     // 🔥 1. Revertir inventario anterior
+    const defaultWarehouseUpdate = await tx.warehouse.findFirst({ where: { isDefault: true } })
+
     for (const detail of existing.details) {
       await tx.product.update({
         where: { id: detail.productId },
@@ -230,7 +249,8 @@ export const updatePurchase = async (db, id, data) => {
           type: 'ADJUSTMENT',
           quantity: Number(detail.quantity),
           reference: 'PURCHASE_UPDATE_REVERT',
-          referenceId: id
+          referenceId: id,
+          warehouseId: defaultWarehouseUpdate?.id
         }
       })
     }
@@ -286,7 +306,8 @@ export const updatePurchase = async (db, id, data) => {
           type: 'ADJUSTMENT',
           quantity: item.quantity,
           reference: 'PURCHASE_UPDATE',
-          referenceId: id
+          referenceId: id,
+          warehouseId: defaultWarehouseUpdate?.id
         }
       })
     }

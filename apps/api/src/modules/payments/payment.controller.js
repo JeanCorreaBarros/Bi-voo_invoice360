@@ -4,7 +4,7 @@ export const createPayment = async (req, res) => {
 
   try {
 
-    const payment = await service.createPayment(req.db, req.body)
+    const payment = await service.createPayment(req.db, req.body, req.user.id)
 
     res.json({
       ok: true,

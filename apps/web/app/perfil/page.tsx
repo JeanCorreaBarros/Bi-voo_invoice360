@@ -1,16 +1,29 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { User, Lock, LogOut, CheckCircle2, Pencil } from "lucide-react"
 import { useRouter } from "next/navigation"
+import toast, { Toaster } from "react-hot-toast"
+
+const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+
+function getAvatarUrl(p: string | null | undefined): string | null {
+  if (!p) return null
+  if (p.startsWith("http")) return p
+  const base = apiBase.replace("/api/", "")
+  return `${base}${p}`
+}
 
 export default function PerfilPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<"personal" | "security">("personal")
   const [user, setUser] = useState<any>(null)
-  
+  const [avatar, setAvatar] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
   // Forms state
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -26,6 +39,7 @@ export default function PerfilPage() {
         setUser(parsed)
         setName(parsed.name || "")
         setEmail(parsed.email || "")
+        setAvatar(getAvatarUrl(parsed.avatar))
       }
     } catch (e) {
       console.error(e)
@@ -43,24 +57,89 @@ export default function PerfilPage() {
     return name.charAt(0).toUpperCase()
   }
 
+  const getRoleLabel = (u: any) => {
+    if (!u?.roles?.length) return "Rol"
+    return u.roles.join(", ")
+  }
+
+  const handleAvatarClick = () => avatarInputRef.current?.click()
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    setUploadingAvatar(true)
+    try {
+      const token = sessionStorage.getItem("token")
+      const fd = new FormData()
+      fd.append("avatar", file)
+
+      const res = await fetch(`${apiBase}auth/avatar`, {
+        method: "PATCH",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: fd,
+      })
+
+      const updated = await res.json()
+      if (!res.ok) {
+        throw new Error(updated?.message || "Error al subir la foto")
+      }
+
+      setAvatar(getAvatarUrl(updated.avatar))
+
+      const merged = { ...user, avatar: updated.avatar }
+      setUser(merged)
+      if (localStorage.getItem("user")) localStorage.setItem("user", JSON.stringify(merged))
+      if (sessionStorage.getItem("user")) sessionStorage.setItem("user", JSON.stringify(merged))
+
+      toast.success("Foto de perfil actualizada")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al subir la foto")
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#F8F9FC] flex flex-col">
+      <Toaster position="top-right" />
       <DashboardHeader />
 
       <main className="flex-1 p-4 lg:p-8 pb-24 lg:pb-8 max-w-6xl mx-auto w-full">
         <div className="flex flex-col lg:flex-row gap-6">
-          
+
           {/* ── Sidebar (Left Column) ── */}
           <div className="w-full lg:w-80 flex flex-col gap-6">
             <div className="bg-white rounded-[24px] p-6 shadow-sm border border-gray-100 flex flex-col items-center">
-              
+
               {/* Avatar */}
               <div className="relative mb-4">
-                <div className="w-24 h-24 rounded-full bg-[#EBF3FB] text-[#00529B] flex items-center justify-center text-4xl font-bold">
-                  {getInitials(name)}
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+                <div className="w-24 h-24 rounded-full bg-[#EBF3FB] text-[#00529B] flex items-center justify-center text-4xl font-bold overflow-hidden">
+                  {avatar ? (
+                    <img src={avatar} alt={name} className="w-full h-full object-cover" />
+                  ) : (
+                    getInitials(name)
+                  )}
                 </div>
-                <button className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center border-2 border-white hover:bg-orange-600 transition-colors shadow-sm">
-                  <Pencil className="w-4 h-4" />
+                <button
+                  type="button"
+                  onClick={handleAvatarClick}
+                  disabled={uploadingAvatar}
+                  className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#00529B] text-white flex items-center justify-center border-2 border-white hover:bg-[#003D73] transition-colors shadow-sm disabled:opacity-60"
+                >
+                  {uploadingAvatar ? (
+                    <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Pencil className="w-4 h-4" />
+                  )}
                 </button>
               </div>
 
@@ -69,7 +148,7 @@ export default function PerfilPage() {
                 {name || "Usuario"}
               </h2>
               <p className="text-sm font-semibold text-gray-400 mb-8">
-                {user?.role?.name || "Rol"}
+                {getRoleLabel(user)}
               </p>
 
               {/* Tabs Menu */}
@@ -78,7 +157,7 @@ export default function PerfilPage() {
                   onClick={() => setActiveTab("personal")}
                   className={`flex items-center gap-3 w-full px-5 py-3.5 rounded-2xl font-bold text-sm transition-all duration-200 ${
                     activeTab === "personal"
-                      ? "bg-orange-50/70 text-orange-500"
+                      ? "bg-[#EBF3FB] text-[#00529B]"
                       : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
@@ -90,7 +169,7 @@ export default function PerfilPage() {
                   onClick={() => setActiveTab("security")}
                   className={`flex items-center gap-3 w-full px-5 py-3.5 rounded-2xl font-bold text-sm transition-all duration-200 ${
                     activeTab === "security"
-                      ? "bg-orange-50/70 text-orange-500"
+                      ? "bg-[#EBF3FB] text-[#00529B]"
                       : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
                   }`}
                 >
@@ -125,7 +204,7 @@ export default function PerfilPage() {
                         type="text" 
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none text-sm font-semibold text-gray-800 transition-all shadow-sm"
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[#00529B]/40 focus:border-[#00529B] outline-none text-sm font-semibold text-gray-800 transition-all shadow-sm"
                       />
                     </div>
 
@@ -146,10 +225,10 @@ export default function PerfilPage() {
                     </div>
 
                     <div className="pt-6 flex flex-col-reverse sm:flex-row items-center gap-4">
-                      <button className="w-full sm:w-auto px-8 h-12 rounded-xl font-bold text-orange-500 border-2 border-orange-100 hover:bg-orange-50 transition-colors">
+                      <button className="w-full sm:w-auto px-8 h-12 rounded-xl font-bold text-[#00529B] border-2 border-[#EBF3FB] hover:bg-[#EBF3FB] transition-colors">
                         Descartar
                       </button>
-                      <button className="w-full sm:w-auto px-8 h-12 rounded-xl font-bold text-white bg-orange-500 hover:bg-orange-600 transition-colors shadow-md shadow-orange-500/20">
+                      <button className="w-full sm:w-auto px-8 h-12 rounded-xl font-bold text-white bg-[#00529B] hover:bg-[#003D73] transition-colors shadow-md shadow-[#00529B]/20">
                         Guardar Cambios
                       </button>
                     </div>
@@ -169,7 +248,7 @@ export default function PerfilPage() {
                         value={currentPassword}
                         onChange={(e) => setCurrentPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none text-sm font-semibold text-gray-800 transition-all shadow-sm"
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[#00529B]/40 focus:border-[#00529B] outline-none text-sm font-semibold text-gray-800 transition-all shadow-sm"
                       />
                     </div>
 
@@ -180,12 +259,12 @@ export default function PerfilPage() {
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400 outline-none text-sm font-semibold text-gray-800 transition-all shadow-sm"
+                        className="w-full h-12 px-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[#00529B]/40 focus:border-[#00529B] outline-none text-sm font-semibold text-gray-800 transition-all shadow-sm"
                       />
                     </div>
 
                     <div className="pt-6">
-                      <button className="w-full sm:w-auto px-8 h-12 rounded-xl font-bold text-white bg-orange-500 hover:bg-orange-600 transition-colors shadow-md shadow-orange-500/20">
+                      <button className="w-full sm:w-auto px-8 h-12 rounded-xl font-bold text-white bg-[#00529B] hover:bg-[#003D73] transition-colors shadow-md shadow-[#00529B]/20">
                         Actualizar Contraseña
                       </button>
                     </div>

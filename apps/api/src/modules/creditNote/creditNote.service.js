@@ -1,8 +1,8 @@
-import prisma from "../lib/prisma.js"
+// Nota: este service no está enganchado a ninguna ruta/controller todavía.
+// `db` debe ser el TenantPrismaClient de la empresa (req.db).
+export async function createCreditNote(db, data) {
 
-export async function createCreditNote(data) {
-
-  return prisma.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
 
     // =====================================
     // 1️⃣ BUSCAR FACTURA
@@ -82,6 +82,8 @@ export async function createCreditNote(data) {
     // 5️⃣ DEVOLVER STOCK
     // =====================================
 
+    const defaultWarehouse = await tx.warehouse.findFirst({ where: { isDefault: true } })
+
     for (const item of productsCache) {
 
       if (item.product.type !== "SERVICE") {
@@ -99,7 +101,8 @@ export async function createCreditNote(data) {
             type: "RETURN",
             quantity: item.quantity,
             reference: "CREDIT_NOTE",
-            referenceId: creditNote.id
+            referenceId: creditNote.id,
+            warehouseId: defaultWarehouse?.id
           }
         })
       }

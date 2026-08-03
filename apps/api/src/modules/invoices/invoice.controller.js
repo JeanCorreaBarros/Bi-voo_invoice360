@@ -3,7 +3,7 @@ import * as service from './invoice.service.js'
 export async function create(req, res) {
   try {
 
-    const invoice = await service.createInvoice(req.db, req.body, req.tenantId)
+    const invoice = await service.createInvoice(req.db, req.body)
 
     res.status(201).json({
       ok: true,

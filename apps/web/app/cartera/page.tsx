@@ -93,7 +93,7 @@ export default function CarteraPage() {
         let apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
         
         if (apiBase.endsWith('/')) apiBase = apiBase.slice(0, -1);
-        const url = `${apiBase}/invoices/${id}`;
+        const url = `${apiBase}invoices/${id}`;
         
         console.log(`[DEBUG] fetchDetail called for ID: ${id}`);
         console.log(`[DEBUG] URL: ${url}`);
@@ -140,7 +140,7 @@ export default function CarteraPage() {
         if (apiBase.endsWith('/')) apiBase = apiBase.slice(0, -1);
 
         try {
-            const res = await fetch(`${apiBase}/invoice-documents/${id}/pdf`, {
+            const res = await fetch(`${apiBase}invoice-documents/${id}/pdf`, {
                 headers: { "Authorization": `Bearer ${token}` }
             })
 

@@ -8,6 +8,7 @@ const router = Router()
 router.post(
   '/test-audit',
   auth,
+  requireTenant,
   audit({ action: 'TEST_ACTION', module: 'SYSTEM' }),
   async (req, res) => {
     res.json({
