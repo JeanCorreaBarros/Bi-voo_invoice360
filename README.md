@@ -12,7 +12,10 @@ Hay dos schemas de Prisma independientes en `apps/api/prisma/`:
 - **`platform/`** — BD de control-plane compartida por toda la plataforma. Guarda el registro de empresas (`Company`, con su `dbName`) y las cuentas `SUPER_ADMIN`.
 - **`tenant/`** — Plantilla que se migra a **una base de datos física por empresa**. No hay columna `companyId` en ningún modelo: el aislamiento entre empresas es la conexión misma a la BD. `apps/api/src/lib/db.js` crea (`CREATE DATABASE`) y migra la BD de cada empresa nueva usando una conexión con privilegios de administrador (`POSTGRES_ADMIN_URL`).
 
-Al arrancar, el servidor llama a `ensurePlatformDatabase()`: crea la BD de plataforma (`PLATFORM_DATABASE_URL`) si no existe y aplica sus migraciones. Es idempotente, así que no hace falta ningún paso manual de BD en un entorno nuevo — ni en local ni en producción.
+Al arrancar, el servidor deja todo listo solo (idempotente, sin pasos manuales en un entorno nuevo):
+- `ensurePlatformDatabase()` — crea la BD de plataforma (`PLATFORM_DATABASE_URL`) si no existe y aplica sus migraciones.
+- `ensureSuperAdmin()` — crea la cuenta `SUPER_ADMIN` (`SUPER_ADMIN_EMAIL`/`SUPER_ADMIN_PASSWORD`, con defaults de desarrollo si no se definen).
+- `ensureAllTenantsMigrated()` — le aplica las migraciones pendientes del schema tenant a **todas** las empresas ya registradas (no solo a las nuevas), así un cambio al schema tenant llega a todo el mundo con solo redesplegar.
 
 ## 📋 Requisitos previos
 
@@ -83,10 +86,10 @@ O por separado: `pnpm dev:web` / `pnpm dev:api`.
 
 ## 🔐 Variables de entorno
 
-- `apps/api/.env.example` — conexión a BD de plataforma y de tenant, credenciales de administrador de Postgres, `JWT_SECRET`, `ENCRYPTION_KEY`.
+- `apps/api/.env.example` — conexión a BD de plataforma y de tenant, credenciales de administrador de Postgres, `JWT_SECRET`, `ENCRYPTION_KEY`, `SUPER_ADMIN_EMAIL`/`SUPER_ADMIN_PASSWORD`.
 - `apps/web/.env.example` — `NEXT_PUBLIC_API_URL` y demás config pública (se "hornea" en el bundle del navegador en build time).
 
-`apps/api/.env` nunca se sube a git. `apps/web/.env` sí, porque solo contiene valores públicos sin secretos.
+`apps/api/.env` nunca se sube a git. `apps/web/.env` sí, porque solo contiene valores públicos sin secretos — apunta a `localhost` para que `pnpm dev` funcione igual en cualquier PC. `apps/web/.env.production` también se sube y trae la URL real de producción: Next.js solo lo lee en `next build`/`next start` (modo producción), nunca en `next dev`, así que el mismo repo sirve para local y para el build de Docker sin tocar nada.
 
 ## 📁 Estructura del proyecto
 
@@ -126,7 +129,7 @@ Ambas apps tienen su propio `Dockerfile`, ya probados end-to-end (build + arranq
    - Verifica: `GET /api` debe responder `{"ok":true,...}`.
 
 3. **Web** (`apps/web`):
-   - Antes de construir, actualiza `apps/web/.env` con el `NEXT_PUBLIC_API_URL` real de tu API (se compila en el bundle, no es una variable de runtime).
+   - `apps/web/.env.production` ya trae la URL real de producción; si tu dominio de API cambia, edita ese archivo (no `.env`) y redespliega.
    - Build: Dockerfile, ruta `apps/web/Dockerfile`, **contexto la raíz del repo** (necesita el workspace de pnpm completo, aunque solo compile `apps/web`).
    - Puerto del contenedor: `3005`.
    - Asigna dominio propio y activa SSL desde EasyPanel.
