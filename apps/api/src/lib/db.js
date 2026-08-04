@@ -8,6 +8,7 @@ import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TENANT_SCHEMA_PATH = path.resolve(__dirname, '../../prisma/tenant/schema.prisma')
+const PLATFORM_SCHEMA_PATH = path.resolve(__dirname, '../../prisma/platform/schema.prisma')
 // Invocamos el entrypoint JS del CLI de Prisma directamente con `node` (en vez
 // del wrapper node_modules/.bin/prisma.cmd) para no depender de shell:true en
 // Windows, que rompe con rutas que tienen espacios.
@@ -91,6 +92,29 @@ export async function provisionTenantDatabase(dbName) {
     process.execPath,
     [PRISMA_CLI_ENTRY, 'migrate', 'deploy', `--schema=${TENANT_SCHEMA_PATH}`],
     { env: { ...process.env, DATABASE_URL: buildTenantUrl(dbName) } }
+  )
+}
+
+/**
+ * Crea la BD de control-plane si no existe y aplica sus migraciones.
+ * Se llama en cada arranque del servidor: es idempotente (CREATE DATABASE
+ * se salta si ya existe, migrate deploy no hace nada si no hay pendientes),
+ * asi que un entorno nuevo (o un redeploy) no requiere ningun paso manual.
+ */
+export async function ensurePlatformDatabase() {
+  const dbName = new URL(process.env.PLATFORM_DATABASE_URL).pathname.replace(/^\//, '')
+
+  await withAdminClient(async (client) => {
+    const { rowCount } = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [dbName])
+    if (rowCount === 0) {
+      await client.query(`CREATE DATABASE "${dbName}"`)
+    }
+  })
+
+  await execFileAsync(
+    process.execPath,
+    [PRISMA_CLI_ENTRY, 'migrate', 'deploy', `--schema=${PLATFORM_SCHEMA_PATH}`],
+    { env: process.env }
   )
 }
 

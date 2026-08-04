@@ -12,6 +12,8 @@ Hay dos schemas de Prisma independientes en `apps/api/prisma/`:
 - **`platform/`** — BD de control-plane compartida por toda la plataforma. Guarda el registro de empresas (`Company`, con su `dbName`) y las cuentas `SUPER_ADMIN`.
 - **`tenant/`** — Plantilla que se migra a **una base de datos física por empresa**. No hay columna `companyId` en ningún modelo: el aislamiento entre empresas es la conexión misma a la BD. `apps/api/src/lib/db.js` crea (`CREATE DATABASE`) y migra la BD de cada empresa nueva usando una conexión con privilegios de administrador (`POSTGRES_ADMIN_URL`).
 
+Al arrancar, el servidor llama a `ensurePlatformDatabase()`: crea la BD de plataforma (`PLATFORM_DATABASE_URL`) si no existe y aplica sus migraciones. Es idempotente, así que no hace falta ningún paso manual de BD en un entorno nuevo — ni en local ni en producción.
+
 ## 📋 Requisitos previos
 
 - Node.js 20+
@@ -43,7 +45,7 @@ Hay dos schemas de Prisma independientes en `apps/api/prisma/`:
    ```bash
    docker compose up -d
    ```
-   Esto crea la BD `plasticoslc` (usada para desarrollar el schema tenant) en `localhost:5433`.
+   Esto crea la BD `plasticoslc` en `localhost:5433` (solo se usa si vas a autorar nuevas migraciones del schema tenant con `prisma migrate dev`; no hace falta para correr la app).
 
 5. **Configurar variables de entorno**
    ```bash
@@ -52,21 +54,15 @@ Hay dos schemas de Prisma independientes en `apps/api/prisma/`:
    ```
    Edita `apps/api/.env` con tus valores (ver detalle de cada variable en el propio `.env.example`). Genera un `JWT_SECRET` y un `ENCRYPTION_KEY` reales, no dejes los de ejemplo.
 
-6. **Crear la base de datos de plataforma** (docker-compose solo crea `plasticoslc`, falta la de control-plane)
-   ```bash
-   docker exec -it plasticoslc-db psql -U plasticoslc -d plasticoslc -c "CREATE DATABASE plasticoslc_platform;"
-   ```
-
-7. **Generar clientes de Prisma y migrar ambos schemas**
+6. **Generar clientes de Prisma**
    ```bash
    cd apps/api
    npm run db:generate
-   npx prisma migrate deploy --schema=prisma/platform/schema.prisma
-   npx prisma migrate deploy --schema=prisma/tenant/schema.prisma
    cd ../..
    ```
+   La BD de plataforma (`plasticoslc_platform`) se crea y migra sola al arrancar el servidor (ver arriba); no hace falta crearla a mano.
 
-8. **(Opcional) Sembrar datos iniciales**
+7. **(Opcional) Sembrar datos iniciales**
    ```bash
    cd apps/api
    npm run seed:platform
@@ -120,21 +116,13 @@ plasticoslc-invoicing-app/
 
 Ambas apps tienen su propio `Dockerfile`, ya probados end-to-end (build + arranque + creación dinámica de BD de tenant).
 
-1. **Postgres**: crea un servicio Postgres en EasyPanel. Además de la BD que crea por defecto, crea manualmente la de plataforma:
-   ```sql
-   CREATE DATABASE plasticoslc_platform;
-   ```
+1. **Postgres**: crea un servicio Postgres en EasyPanel y anota host interno, usuario y password. No hace falta crear la BD de plataforma a mano: el API la crea y migra sola al arrancar.
 
 2. **API** (`apps/api`):
    - Build: Dockerfile, ruta `apps/api/Dockerfile`, contexto `apps/api`.
    - Variables de entorno: igual que `apps/api/.env.example`, apuntando a los hosts internos del Postgres de EasyPanel. Genera `JWT_SECRET` y `ENCRYPTION_KEY` nuevos para producción.
    - Puerto del contenedor: `3000`.
    - **Monta un volumen persistente en `/app/uploads`** (logos de empresa, avatares) para que no se pierdan en cada redeploy.
-   - Tras el primer deploy, corre las migraciones desde la consola del contenedor:
-     ```bash
-     npx prisma migrate deploy --schema=prisma/platform/schema.prisma
-     npx prisma migrate deploy --schema=prisma/tenant/schema.prisma
-     ```
    - Verifica: `GET /api` debe responder `{"ok":true,...}`.
 
 3. **Web** (`apps/web`):
