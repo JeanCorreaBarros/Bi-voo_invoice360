@@ -23,7 +23,10 @@ services:
       dockerfile: Dockerfile
     container_name: plasticoslc-api
     restart: unless-stopped
-    command: npm run dev
+    # -L (legacy watch / polling): los eventos de fs nativos no siempre
+    # cruzan el bind mount de Windows hacia el contenedor Linux, así que sin
+    # polling nodemon no se entera de los cambios en el código.
+    command: npx nodemon -L src/index.js
     depends_on:
       db:
         condition: service_healthy

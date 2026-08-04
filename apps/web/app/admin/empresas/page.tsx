@@ -32,6 +32,7 @@ type Company = {
   email?: string | null;
   phone?: string | null;
   active: boolean;
+  isDemo?: boolean;
   createdAt: string;
 };
 
@@ -113,6 +114,7 @@ export default function EmpresasAdminPage() {
     adminName: "",
     adminEmail: "",
     adminPassword: "",
+    isDemo: false,
   };
   const [form, setForm] = useState(emptyForm);
 
@@ -218,6 +220,7 @@ export default function EmpresasAdminPage() {
               email: form.adminEmail,
               password: form.adminPassword,
             },
+            isDemo: form.isDemo,
           };
 
       const url = editingId ? `${apiBase}companies/${editingId}` : `${apiBase}companies`;
@@ -408,7 +411,16 @@ export default function EmpresasAdminPage() {
                 <tbody className="divide-y divide-gray-50">
                   {companies.map((c) => (
                     <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{c.businessName}</td>
+                      <td className="px-5 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-2">
+                          {c.businessName}
+                          {c.isDemo && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                              Demo
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-5 py-4 text-sm text-gray-500 whitespace-nowrap">{c.nit}</td>
                       <td className="px-5 py-4 text-sm text-gray-500 whitespace-nowrap">{c.email || "—"}</td>
                       <td className="px-5 py-4">
@@ -516,6 +528,48 @@ export default function EmpresasAdminPage() {
                 </div>
               </div>
             </div>
+
+            {/* El seed demo solo corre al provisionar: no se ofrece al editar */}
+            {!editingId && (
+              <div className="pt-2 border-t border-gray-100 mt-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest pt-3 mb-3">Tipo de empresa</p>
+                <label
+                  className={`flex items-start gap-3 p-4 rounded-2xl border cursor-pointer transition-colors ${
+                    form.isDemo
+                      ? "bg-amber-50 border-amber-200"
+                      : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={form.isDemo}
+                    onChange={(e) => setForm({ ...form, isDemo: e.target.checked })}
+                    className="w-5 h-5 rounded accent-amber-500 shrink-0 mt-0.5"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      Empresa demo
+                      {form.isDemo && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-200 text-amber-800">
+                          Se llenará con datos
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                      Al crearla se siembra automáticamente con datos ficticios de los últimos 3 años:
+                      clientes, proveedores, productos, facturas, compras, cartera, contabilidad,
+                      bancos, conciliaciones, activos fijos, presupuestos, impuestos y cierres.
+                      Ideal para mostrarle el sistema a un cliente sin cargar nada a mano.
+                    </p>
+                    {form.isDemo && (
+                      <p className="text-[11px] text-amber-700 font-semibold mt-2">
+                        La creación puede tardar cerca de un minuto mientras se generan los datos.
+                      </p>
+                    )}
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
 
           <div className="px-6 py-4 bg-gray-50/80 backdrop-blur-md border-t border-gray-100 flex flex-col-reverse sm:flex-row gap-3">

@@ -1,7 +1,8 @@
 import express from 'express';
-import { getRoles, getPermissions } from './access.controller.js';
+import { getRoles, getPermissions, createRole, updateRole, deleteRole } from './access.controller.js';
 import { auth } from '../../middlewares/auth.middleware.js';
 import { requireTenant } from '../../middlewares/tenant.middleware.js';
+import { hasPermission } from '../../middlewares/permission.middleware.js';
 
 const router = express.Router();
 
@@ -11,5 +12,9 @@ const router = express.Router();
 // request bajo /api/*, no solo las de este módulo.
 router.get('/roles', auth, requireTenant, getRoles);
 router.get('/permissions', auth, requireTenant, getPermissions);
+
+router.post('/roles', auth, requireTenant, hasPermission('role.create'), createRole);
+router.put('/roles/:id', auth, requireTenant, hasPermission('role.update'), updateRole);
+router.delete('/roles/:id', auth, requireTenant, hasPermission('role.delete'), deleteRole);
 
 export default router;

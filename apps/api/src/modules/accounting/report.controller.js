@@ -4,6 +4,8 @@ import {
   getLedger,
   getBalanceSheet,
   getIncomeStatement,
+  getBalanceSheetComparative,
+  getIncomeStatementComparative,
   getCustomerStatement,
   getSupplierStatement,
   getFinancialIndicators
@@ -55,6 +57,40 @@ export async function incomeStatement(req, res) {
   try {
     const { from, to } = req.query
     const data = await getIncomeStatement(req.db, { from, to })
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+// "years" llega como "2022,2023,2024,2025,2026"; si no se manda, usa los
+// últimos 5 años calendario terminando en el actual.
+function parseYears(raw) {
+  if (raw) {
+    const years = String(raw)
+      .split(',')
+      .map((y) => Number(y.trim()))
+      .filter((y) => Number.isInteger(y))
+    if (years.length > 0) return years
+  }
+  const current = new Date().getFullYear()
+  return [current - 4, current - 3, current - 2, current - 1, current]
+}
+
+export async function balanceSheetComparative(req, res) {
+  try {
+    const years = parseYears(req.query.years)
+    const data = await getBalanceSheetComparative(req.db, { years })
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+export async function incomeStatementComparative(req, res) {
+  try {
+    const years = parseYears(req.query.years)
+    const data = await getIncomeStatementComparative(req.db, { years })
     res.json({ ok: true, data })
   } catch (error) {
     res.status(400).json({ ok: false, message: error.message })

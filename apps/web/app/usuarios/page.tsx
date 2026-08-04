@@ -5,7 +5,7 @@ import { DashboardHeader } from "@/components/dashboard-header"
 import {
   Plus, Edit, Search, ChevronLeft, ChevronRight,
   User, Mail, Shield, Key, UserCog, Users, ShieldCheck,
-  CheckCircle2, XCircle, ChevronDown, ChevronUp
+  CheckCircle2, XCircle, ChevronDown, ChevronUp, Trash2, FileText
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -16,6 +16,7 @@ const _apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/"
 const API_BASE = _apiUrl.endsWith("/") ? _apiUrl.slice(0, -1) : _apiUrl
 
 // ─── Permission label map ────────────────────────────────────────────
+// Debe reflejar los permisos sembrados en apps/api/src/seed/tenantRoles.js.
 const PERMISSION_LABELS: Record<string, { label: string; group: string }> = {
   "user.create":          { label: "Crear usuarios",              group: "Usuarios" },
   "user.read":            { label: "Ver usuarios",                group: "Usuarios" },
@@ -30,16 +31,23 @@ const PERMISSION_LABELS: Record<string, { label: string; group: string }> = {
   "product.read":         { label: "Ver productos",               group: "Productos" },
   "product.update":       { label: "Editar productos",            group: "Productos" },
   "product.delete":       { label: "Eliminar productos",          group: "Productos" },
-  "company.manage":       { label: "Administrar empresa",         group: "Empresa" },
+  "accounting.entry.read":       { label: "Ver comprobantes y reportes", group: "Contabilidad" },
+  "accounting.entry.manage":     { label: "Crear/anular comprobantes",   group: "Contabilidad" },
+  "accounting.account.manage":   { label: "Administrar plan de cuentas", group: "Contabilidad" },
+  "accounting.costcenter.manage":{ label: "Administrar centros de costo",group: "Contabilidad" },
+  "accounting.settings.manage":  { label: "Configuración contable",      group: "Contabilidad" },
+  "accounting.audit.read":       { label: "Ver auditoría",               group: "Contabilidad" },
 }
 
 const ALL_PERMISSION_CODES = Object.keys(PERMISSION_LABELS)
 
+const PERMISSION_GROUPS = ["Usuarios", "Roles", "Productos", "Contabilidad"] as const
+
 const GROUP_COLORS: Record<string, string> = {
-  Usuarios:  "bg-blue-50 text-blue-700 border-blue-200",
-  Roles:     "bg-purple-50 text-purple-700 border-purple-200",
-  Productos: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  Empresa:   "bg-orange-50 text-orange-700 border-orange-200",
+  Usuarios:     "bg-blue-50 text-blue-700 border-blue-200",
+  Roles:        "bg-purple-50 text-purple-700 border-purple-200",
+  Productos:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Contabilidad: "bg-orange-50 text-orange-700 border-orange-200",
 }
 
 // ─── Interfaces ──────────────────────────────────────────────────────
@@ -87,8 +95,11 @@ function UserCard({ user, onEdit }: { user: User; onEdit: (u: User) => void }) {
 }
 
 // ─── Role Card ───────────────────────────────────────────────────────
-function RoleCard({ role }: { role: Role }) {
+function RoleCard({ role, onEdit, onDelete }: { role: Role; onEdit: (r: Role) => void; onDelete: (r: Role) => void }) {
   const [expanded, setExpanded] = useState(false)
+  // ADMIN se siembra al crear la empresa y lo tiene el primer administrador:
+  // el backend rechaza editarlo o borrarlo, así que tampoco se ofrece aquí.
+  const isSystemRole = role.name === "ADMIN"
 
   const permsByGroup = useMemo(() => {
     const groups: Record<string, string[]> = {}
@@ -106,21 +117,51 @@ function RoleCard({ role }: { role: Role }) {
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors text-left"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[hsl(209,79%,27%,0.08)] flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-[hsl(209,79%,27%)]" />
+      <div className="flex items-center gap-2 pr-4">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex-1 flex items-center justify-between p-5 hover:bg-gray-50 transition-colors text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[hsl(209,79%,27%,0.08)] flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-[hsl(209,79%,27%)]" />
+            </div>
+            <div>
+              <p className="font-bold text-gray-900 flex items-center gap-2">
+                {role.name}
+                {isSystemRole && (
+                  <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                    Sistema
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-gray-500">
+                {role.description || `${role.permissions.length} permisos asignados`}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-bold text-gray-900">{role.name}</p>
-            <p className="text-xs text-gray-500">{role.permissions.length} permisos asignados</p>
+          {expanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </button>
+
+        {!isSystemRole && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={() => onEdit(role)}
+              title="Editar rol"
+              className="p-2 rounded-lg text-[hsl(209,79%,27%)] hover:bg-blue-50 transition-colors"
+            >
+              <Edit className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onDelete(role)}
+              title="Eliminar rol"
+              className="p-2 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           </div>
-        </div>
-        {expanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-      </button>
+        )}
+      </div>
 
       {expanded && (
         <div className="border-t border-gray-100 p-5 space-y-5">
@@ -135,7 +176,7 @@ function RoleCard({ role }: { role: Role }) {
 
           {/* All permissions checklist */}
           <div className="space-y-3">
-            {(["Usuarios", "Roles", "Productos", "Empresa"] as const).map((group) => {
+            {PERMISSION_GROUPS.map((group) => {
               const groupPerms = allPerms.filter((code) => PERMISSION_LABELS[code]?.group === group)
               if (groupPerms.length === 0) return null
               return (
@@ -185,6 +226,13 @@ export default function UsuariosPage() {
   // Roles state
   const [rolesData, setRolesData] = useState<Role[]>([])
   const [rolesLoading, setRolesLoading] = useState(false)
+  const [isRoleModalOpen, setIsRoleModalOpen] = useState(false)
+  const [isRoleEdit, setIsRoleEdit] = useState(false)
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null)
+  const [roleSaving, setRoleSaving] = useState(false)
+  const [roleForm, setRoleForm] = useState<{ name: string; description: string; permissionCodes: string[] }>({
+    name: "", description: "", permissionCodes: [],
+  })
 
   const itemsPerPage = 10
   const normalize = (t: string) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -243,6 +291,94 @@ export default function UsuariosPage() {
   useEffect(() => { fetchUsers(); fetchRoles() }, [])
   useEffect(() => { if (activeTab === "roles") fetchRolesWithPermissions() }, [activeTab])
   useEffect(() => { setCurrentPage(1) }, [search])
+
+  // ── Roles CRUD ──
+  const openRoleCreate = () => {
+    setIsRoleEdit(false)
+    setSelectedRoleId(null)
+    setRoleForm({ name: "", description: "", permissionCodes: [] })
+    setIsRoleModalOpen(true)
+  }
+
+  const openRoleEdit = (role: Role) => {
+    setIsRoleEdit(true)
+    setSelectedRoleId(role.id)
+    setRoleForm({
+      name: role.name,
+      description: role.description || "",
+      permissionCodes: role.permissions.map((p) => p.code),
+    })
+    setIsRoleModalOpen(true)
+  }
+
+  const toggleRolePermission = (code: string) => {
+    setRoleForm((prev) => ({
+      ...prev,
+      permissionCodes: prev.permissionCodes.includes(code)
+        ? prev.permissionCodes.filter((c) => c !== code)
+        : [...prev.permissionCodes, code],
+    }))
+  }
+
+  const toggleRoleGroup = (group: string) => {
+    const groupCodes = ALL_PERMISSION_CODES.filter((c) => PERMISSION_LABELS[c].group === group)
+    const allSelected = groupCodes.every((c) => roleForm.permissionCodes.includes(c))
+    setRoleForm((prev) => ({
+      ...prev,
+      permissionCodes: allSelected
+        ? prev.permissionCodes.filter((c) => !groupCodes.includes(c))
+        : Array.from(new Set([...prev.permissionCodes, ...groupCodes])),
+    }))
+  }
+
+  const handleRoleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!roleForm.name.trim()) { toast.error("El nombre del rol es obligatorio"); return }
+    if (roleForm.permissionCodes.length === 0) { toast.error("Selecciona al menos un permiso"); return }
+
+    setRoleSaving(true)
+    try {
+      const token = sessionStorage.getItem("token")
+      const res = await fetch(
+        isRoleEdit ? `${API_BASE}/roles/${selectedRoleId}` : `${API_BASE}/roles`,
+        {
+          method: isRoleEdit ? "PUT" : "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify(roleForm),
+        }
+      )
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.message || "No se pudo guardar el rol")
+
+      toast.success(isRoleEdit ? "Rol actualizado" : "Rol creado")
+      setIsRoleModalOpen(false)
+      fetchRolesWithPermissions()
+      fetchRoles()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar el rol")
+    } finally {
+      setRoleSaving(false)
+    }
+  }
+
+  const handleRoleDelete = async (role: Role) => {
+    if (!window.confirm(`¿Eliminar el rol "${role.name}"? Esta acción no se puede deshacer.`)) return
+    try {
+      const token = sessionStorage.getItem("token")
+      const res = await fetch(`${API_BASE}/roles/${role.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.message || "No se pudo eliminar el rol")
+
+      toast.success("Rol eliminado")
+      fetchRolesWithPermissions()
+      fetchRoles()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo eliminar el rol")
+    }
+  }
 
   // ── Filter / Paginate ──
   const filteredUsers = useMemo(() => {
@@ -304,15 +440,13 @@ export default function UsuariosPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Gestión de Accesos</h1>
             <p className="text-sm text-gray-500 mt-1">Administra usuarios, roles y permisos de la plataforma</p>
           </div>
-          {activeTab === "usuarios" && (
-            <Button
-              onClick={openCreate}
-              className="bg-[hsl(209,79%,27%)] hover:bg-[hsl(209,79%,22%)] text-white flex items-center gap-2 w-full sm:w-auto rounded-xl shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              Crear usuario
-            </Button>
-          )}
+          <Button
+            onClick={activeTab === "usuarios" ? openCreate : openRoleCreate}
+            className="bg-[hsl(209,79%,27%)] hover:bg-[hsl(209,79%,22%)] text-white flex items-center gap-2 w-full sm:w-auto rounded-xl shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            {activeTab === "usuarios" ? "Crear usuario" : "Crear rol"}
+          </Button>
         </div>
 
         {/* Tabs */}
@@ -457,7 +591,7 @@ export default function UsuariosPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-2xl text-sm text-blue-700">
               <ShieldCheck className="w-5 h-5 shrink-0" />
-              <p>Aquí puedes ver los roles disponibles y los permisos que tiene cada uno dentro de la plataforma. Haz clic en un rol para expandir sus detalles.</p>
+              <p>Crea roles a la medida y define exactamente a qué tiene acceso cada uno. Haz clic en un rol para ver sus permisos, o usa los iconos para editarlo o eliminarlo.</p>
             </div>
 
             {rolesLoading ? (
@@ -469,10 +603,13 @@ export default function UsuariosPage() {
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-dashed border-gray-300">
                 <ShieldCheck className="w-12 h-12 text-gray-300 mb-3" />
                 <p className="font-semibold text-gray-700">No hay roles disponibles</p>
+                <p className="text-sm text-gray-400 mt-1">Crea el primer rol con el botón de arriba</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {rolesData.map((role) => <RoleCard key={role.id} role={role} />)}
+                {rolesData.map((role) => (
+                  <RoleCard key={role.id} role={role} onEdit={openRoleEdit} onDelete={handleRoleDelete} />
+                ))}
               </div>
             )}
           </div>
@@ -563,6 +700,96 @@ export default function UsuariosPage() {
               <Button type="submit" disabled={loading}
                 className={`flex-[2] h-12 text-white font-black rounded-xl shadow-sm ${isEdit ? "bg-[hsl(209,79%,20%)] hover:bg-[hsl(209,79%,25%)]" : "bg-[hsl(209,79%,27%)] hover:bg-[hsl(209,79%,32%)]"}`}>
                 {loading ? "Procesando..." : isEdit ? "Guardar Cambios" : "Crear Usuario"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal Crear / Editar Rol ── */}
+      <Dialog open={isRoleModalOpen} onOpenChange={setIsRoleModalOpen}>
+        <DialogContent className="bg-white w-[calc(100%-1.5rem)] sm:max-w-2xl max-h-[94dvh] overflow-hidden rounded-3xl p-0 border-none shadow-2xl flex flex-col">
+          <div className="px-6 py-5 bg-[hsl(209,79%,27%,0.03)] border-b border-gray-100">
+            <DialogTitle className="text-xl font-black text-[hsl(209,79%,27%)]">
+              {isRoleEdit ? "Editar Rol" : "Nuevo Rol"}
+            </DialogTitle>
+            <p className="text-[11px] font-bold uppercase tracking-widest mt-0.5 text-gray-400">
+              Define a qué tiene acceso este rol
+            </p>
+          </div>
+
+          <form onSubmit={handleRoleSubmit} className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5 scrollbar-hide">
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1">Nombre del rol</label>
+                <div className="relative">
+                  <Shield className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input type="text" value={roleForm.name} onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                    className="w-full h-12 pl-11 pr-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[hsl(209,79%,27%)] outline-none text-sm font-medium"
+                    placeholder="CONTADOR, VENDEDOR, AUXILIAR..." required />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1">Descripción (opcional)</label>
+                <div className="relative">
+                  <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <input type="text" value={roleForm.description} onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
+                    className="w-full h-12 pl-11 pr-4 rounded-xl border border-gray-200 bg-white focus:ring-2 focus:ring-[hsl(209,79%,27%)] outline-none text-sm font-medium"
+                    placeholder="Para qué sirve este rol" />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                    Permisos ({roleForm.permissionCodes.length} de {ALL_PERMISSION_CODES.length})
+                  </label>
+                </div>
+
+                {PERMISSION_GROUPS.map((group) => {
+                  const groupCodes = ALL_PERMISSION_CODES.filter((c) => PERMISSION_LABELS[c].group === group)
+                  const allSelected = groupCodes.every((c) => roleForm.permissionCodes.includes(c))
+                  return (
+                    <div key={group} className="border border-gray-100 rounded-2xl overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50/70">
+                        <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${GROUP_COLORS[group]}`}>
+                          {group}
+                        </span>
+                        <button type="button" onClick={() => toggleRoleGroup(group)}
+                          className="text-xs font-bold text-[hsl(209,79%,27%)] hover:underline">
+                          {allSelected ? "Quitar todos" : "Seleccionar todos"}
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 p-3">
+                        {groupCodes.map((code) => {
+                          const checked = roleForm.permissionCodes.includes(code)
+                          return (
+                            <label key={code}
+                              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-colors ${checked ? "bg-emerald-50 hover:bg-emerald-100" : "bg-gray-50 hover:bg-gray-100"}`}>
+                              <input type="checkbox" checked={checked} onChange={() => toggleRolePermission(code)}
+                                className="w-4 h-4 rounded accent-emerald-600 shrink-0" />
+                              <span className={`text-xs font-medium ${checked ? "text-gray-800" : "text-gray-500"}`}>
+                                {PERMISSION_LABELS[code].label}
+                              </span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50/80 border-t border-gray-100 flex gap-3">
+              <Button type="button" variant="ghost" onClick={() => setIsRoleModalOpen(false)}
+                className="flex-1 h-12 rounded-xl font-bold text-gray-500 hover:bg-gray-100">
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={roleSaving}
+                className="flex-[2] h-12 text-white font-black rounded-xl shadow-sm bg-[hsl(209,79%,27%)] hover:bg-[hsl(209,79%,32%)]">
+                {roleSaving ? "Procesando..." : isRoleEdit ? "Guardar Cambios" : "Crear Rol"}
               </Button>
             </div>
           </form>

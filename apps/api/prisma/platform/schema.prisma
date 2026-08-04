@@ -26,6 +26,12 @@ model Company {
   dbName       String  @unique
   active       Boolean @default(true)
 
+  // Empresa de demostración: al crearla se siembra con datos ficticios
+  // (facturas, compras, cartera, contabilidad...) para poder mostrarla a
+  // clientes sin cargar nada a mano. Solo marca el origen de los datos;
+  // no cambia el comportamiento de ningún módulo.
+  isDemo Boolean @default(false)
+
   tickets SupportTicket[]
 
   createdAt DateTime @default(now())

@@ -10,6 +10,7 @@ import {
 import { seedTenantRolesAndPermissions } from '../../seed/tenantRoles.js'
 import { seedChartOfAccounts } from '../../seed/chartOfAccounts.js'
 import { seedAccountingSettings } from '../../seed/accountingSettings.js'
+import { seedDemoData } from '../../seed/demoData.js'
 
 function slugify(text) {
   return (text ?? '')
@@ -32,7 +33,7 @@ function buildDbName(company) {
 // tenant, la siembra (roles/permisos/ADMIN/perfil/usuario) y solo al
 // final registra la empresa en la BD platform. No es atómico entre
 // las dos BDs: si algo falla se hace best-effort cleanup.
-export async function createCompanyWithAdmin({ company, admin }) {
+export async function createCompanyWithAdmin({ company, admin, isDemo = false }) {
   const existingCompany = await platformDb.company.findUnique({ where: { nit: company.nit } })
   if (existingCompany) {
     throw new Error('Ya existe una empresa registrada con ese NIT')
@@ -89,13 +90,22 @@ export async function createCompanyWithAdmin({ company, admin }) {
       }
     })
 
+    // Datos de demostración: se siembran con el admin ya creado (los
+    // documentos necesitan un userId) y antes de registrar la empresa en
+    // platform, para que un fallo acá dispare el mismo cleanup que
+    // cualquier otro error de provisioning.
+    if (isDemo) {
+      await seedDemoData(tenantDb, { userId: adminUser.id })
+    }
+
     const newCompany = await platformDb.$transaction(async (tx) => {
       const created = await tx.company.create({
         data: {
           businessName: company.businessName,
           nit: company.nit,
           dbName,
-          active: true
+          active: true,
+          isDemo
         }
       })
 

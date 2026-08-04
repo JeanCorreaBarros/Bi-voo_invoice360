@@ -17,7 +17,7 @@ function canManageCompany(req) {
 // Crear empresa + primer usuario administrador
 export const create = async (req, res) => {
   try {
-    const { company, admin } = req.body
+    const { company, admin, isDemo } = req.body
 
     if (!company || !admin || !admin.email || !admin.password) {
       return res.status(400).json({
@@ -26,7 +26,7 @@ export const create = async (req, res) => {
       })
     }
 
-    const result = await createCompanyWithAdmin({ company, admin })
+    const result = await createCompanyWithAdmin({ company, admin, isDemo: Boolean(isDemo) })
 
     res.status(201).json({
       ok: true,
