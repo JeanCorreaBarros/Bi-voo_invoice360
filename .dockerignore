@@ -1,0 +1,7 @@
+**/node_modules
+**/.next
+.git
+apps/api/uploads
+apps/api/src/generated
+apps/api/.env
+apps/web/.env.local
