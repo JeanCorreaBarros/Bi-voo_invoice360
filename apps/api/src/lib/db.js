@@ -3,6 +3,7 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import pg from 'pg'
+import bcrypt from 'bcryptjs'
 import { PrismaClient as PlatformPrismaClient } from '../generated/platform/index.js'
 import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js'
 
@@ -116,6 +117,24 @@ export async function ensurePlatformDatabase() {
     [PRISMA_CLI_ENTRY, 'migrate', 'deploy', `--schema=${PLATFORM_SCHEMA_PATH}`],
     { env: process.env }
   )
+}
+
+/**
+ * Crea la cuenta SUPER_ADMIN de plataforma si no existe (email/password
+ * configurables por env var, con defaults solo para desarrollo local).
+ * Idempotente: si el usuario ya existe no le toca la contraseña, para no
+ * pisar un cambio que ya haya hecho el super admin desde la app.
+ */
+export async function ensureSuperAdmin() {
+  const email = process.env.SUPER_ADMIN_EMAIL || 'admin@plasticoslc.com'
+  const password = process.env.SUPER_ADMIN_PASSWORD || 'Admin123*'
+  const hashedPassword = await bcrypt.hash(password, 10)
+
+  await platformDb.platformUser.upsert({
+    where: { email },
+    update: {},
+    create: { name: 'Super Admin', email, password: hashedPassword, active: true }
+  })
 }
 
 // Limpieza best-effort cuando falla algún paso posterior a CREATE DATABASE.
