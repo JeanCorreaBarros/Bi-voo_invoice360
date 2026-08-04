@@ -6,6 +6,9 @@ import pg from 'pg'
 import bcrypt from 'bcryptjs'
 import { PrismaClient as PlatformPrismaClient } from '../generated/platform/index.js'
 import { PrismaClient as TenantPrismaClient } from '../generated/tenant/index.js'
+import { seedTenantRolesAndPermissions } from '../seed/tenantRoles.js'
+import { seedChartOfAccounts } from '../seed/chartOfAccounts.js'
+import { seedAccountingSettings } from '../seed/accountingSettings.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const TENANT_SCHEMA_PATH = path.resolve(__dirname, '../../prisma/tenant/schema.prisma')
@@ -89,11 +92,41 @@ export async function provisionTenantDatabase(dbName) {
     await client.query(`CREATE DATABASE "${dbName}"`)
   })
 
+  await migrateTenantDatabase(dbName)
+}
+
+// Aplica `prisma migrate deploy` del schema tenant contra la BD física de
+// una empresa puntual (por nombre de BD, no requiere fila en platform).
+export async function migrateTenantDatabase(dbName) {
   await execFileAsync(
     process.execPath,
     [PRISMA_CLI_ENTRY, 'migrate', 'deploy', `--schema=${TENANT_SCHEMA_PATH}`],
     { env: { ...process.env, DATABASE_URL: buildTenantUrl(dbName) } }
   )
+}
+
+/**
+ * Pone al día el schema tenant de TODAS las empresas registradas: les
+ * corre las migraciones pendientes y re-siembra permisos/plan de cuentas
+ * (idempotente). Se llama en cada arranque del servidor, igual que
+ * ensurePlatformDatabase(), para que un cambio al schema tenant llegue
+ * solo a las empresas ya existentes sin correr nada a mano.
+ */
+export async function ensureAllTenantsMigrated() {
+  const companies = await platformDb.company.findMany()
+
+  for (const company of companies) {
+    await migrateTenantDatabase(company.dbName)
+
+    const tenantDb = getTenantClientByDbName(company.dbName)
+    try {
+      await seedTenantRolesAndPermissions(tenantDb)
+      await seedChartOfAccounts(tenantDb)
+      await seedAccountingSettings(tenantDb)
+    } finally {
+      await tenantDb.$disconnect()
+    }
+  }
 }
 
 /**
