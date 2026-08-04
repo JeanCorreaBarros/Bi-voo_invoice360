@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import {
   ChevronDown, AlertTriangle, BookOpen, FileSpreadsheet, FileText,
   Download, Search, ExternalLink, FolderOpen,
+  Activity, Key, FileEdit, ShieldCheck, Files, Calculator, ArrowRightLeft, Lock, TrendingUp, HelpCircle
 } from "lucide-react"
 import { DOCUMENTS, CATEGORY_LABELS, DOC_SOURCE, type DocCategory, type DocFormat } from "./formularios"
 
@@ -99,32 +100,66 @@ const TOPICS: Topic[] = [
   },
 ]
 
+const TOPIC_ICONS: Record<string, any> = {
+  "dian-estado": Activity,
+  "cufe": Key,
+  "notas": FileEdit,
+  "doc-soporte": ShieldCheck,
+  "exogena": Files,
+  "renta": Calculator,
+  "conciliacion": ArrowRightLeft,
+  "cierre": Lock,
+  "indicadores": TrendingUp,
+}
+
 function AccordionItem({ topic }: { topic: Topic }) {
   const [open, setOpen] = useState(false)
+  const Icon = TOPIC_ICONS[topic.id] || HelpCircle
+
   return (
-    <div className="border border-gray-100 rounded-xl overflow-hidden bg-white">
+    <div className={`border rounded-2xl overflow-hidden transition-all duration-200 bg-white ${
+      open
+        ? "border-blue-100 shadow-md ring-1 ring-blue-50/50"
+        : "border-gray-100 hover:border-gray-200 hover:shadow-sm"
+    }`}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors text-left"
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-gray-50/50 transition-colors text-left"
       >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-sm font-semibold text-gray-800">{topic.title}</span>
-          {topic.status === "pendiente" && (
-            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 shrink-0">
-              Pendiente DIAN
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 transition-colors ${
+            open
+              ? "bg-blue-50 text-[hsl(209,79%,35%)] border-blue-100"
+              : "bg-gray-50 text-gray-400 border-gray-100"
+          }`}>
+            <Icon className="h-4.5 w-4.5" />
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2.5">
+            <span className={`text-sm font-bold transition-colors ${open ? "text-[hsl(209,79%,35%)]" : "text-gray-800"}`}>
+              {topic.title}
             </span>
-          )}
-          {topic.status === "activo" && (
-            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
-              Disponible
-            </span>
-          )}
+            <div className="flex items-center gap-2">
+              {topic.status === "pendiente" && (
+                <span className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100">
+                  Pendiente DIAN
+                </span>
+              )}
+              {topic.status === "activo" && (
+                <span className="text-[9px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+                  Disponible
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${open ? "bg-blue-50 text-[hsl(209,79%,35%)]" : "text-gray-400"}`}>
+          <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </div>
       </button>
       {open && (
-        <div className="px-5 pb-4 space-y-2.5">
+        <div className="px-5 pb-5 pt-1 space-y-3 pl-[56px] border-t border-gray-50/80">
           {topic.content.map((p, i) => (
             <p key={i} className="text-sm text-gray-600 leading-relaxed">{p}</p>
           ))}
@@ -141,29 +176,49 @@ const FORMAT_STYLES: Record<DocFormat, { label: string; className: string; Icon:
   pdf:  { label: "PDF",   className: "bg-red-50 text-red-600 border-red-200",             Icon: FileText },
 }
 
-function DocRow({ doc }: { doc: (typeof DOCUMENTS)[number] }) {
+function DocCard({ doc }: { doc: (typeof DOCUMENTS)[number] }) {
   const style = FORMAT_STYLES[doc.format]
   return (
     <a
       href={doc.url}
       target="_blank"
       rel="noopener noreferrer"
-      className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+      className="group flex flex-col justify-between p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200 hover:-translate-y-0.5"
     >
-      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${style.className}`}>
-        <style.Icon className="h-4 w-4" />
+      <div className="space-y-4">
+        {/* Top: Icon, Code & Badge */}
+        <div className="flex items-center justify-between">
+          <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110 ${style.className}`}>
+            <style.Icon className="h-5 w-5" />
+          </div>
+          <div className="flex gap-1.5 items-center">
+            {doc.code && (
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-gray-50 border border-gray-100 rounded text-gray-500 shadow-sm">
+                N° {doc.code}
+              </span>
+            )}
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${style.className}`}>
+              {style.label}
+            </span>
+          </div>
+        </div>
+
+        {/* Title and Description */}
+        <div className="space-y-1">
+          <h3 className="font-bold text-sm text-gray-800 leading-snug group-hover:text-[hsl(209,79%,35%)] transition-colors line-clamp-2">
+            {doc.title}
+          </h3>
+          <p className="text-xs text-gray-500 leading-relaxed line-clamp-2">
+            {doc.description || "Formulario o formato oficial para descarga directa."}
+          </p>
+        </div>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-800 truncate">
-          {doc.code && <span className="font-mono text-gray-400 mr-1.5">{doc.code}</span>}
-          {doc.title}
-        </p>
-        {doc.description && <p className="text-xs text-gray-500 truncate mt-0.5">{doc.description}</p>}
+
+      {/* Bottom Download Info */}
+      <div className="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between text-[11px] font-semibold text-gray-400 group-hover:text-[hsl(209,79%,35%)] transition-colors">
+        <span>Descargar</span>
+        <Download className="h-4 w-4 text-gray-300 group-hover:text-[hsl(209,79%,35%)] shrink-0 transition-colors" />
       </div>
-      <span className={`hidden sm:inline text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded border shrink-0 ${style.className}`}>
-        {style.label}
-      </span>
-      <Download className="h-4 w-4 text-gray-300 group-hover:text-[hsl(209,79%,35%)] shrink-0 transition-colors" />
     </a>
   )
 }
@@ -214,16 +269,20 @@ function FormulariosTab() {
           const docs = byCategory[cat]
           if (docs.length === 0) return null
           return (
-            <div key={cat} className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100">
-                <p className="text-sm font-bold text-gray-800">
+            <div key={cat} className="space-y-3">
+              <div className="border-b border-gray-100 pb-2">
+                <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                   {CATEGORY_LABELS[cat].label}
-                  <span className="ml-2 text-xs font-semibold text-gray-400">{docs.length}</span>
-                </p>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                    {docs.length}
+                  </span>
+                </h2>
                 <p className="text-xs text-gray-500 mt-0.5">{CATEGORY_LABELS[cat].hint}</p>
               </div>
-              <div className="divide-y divide-gray-50">
-                {docs.map((doc) => <DocRow key={`${doc.url}-${doc.title}`} doc={doc} />)}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {docs.map((doc) => (
+                  <DocCard key={`${doc.url}-${doc.title}`} doc={doc} />
+                ))}
               </div>
             </div>
           )
@@ -249,7 +308,7 @@ export default function DocumentacionPage() {
   const [tab, setTab] = useState<"guias" | "formularios">("guias")
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="w-full space-y-5">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
           <BookOpen className="h-5 w-5 text-gray-400" /> Documentación
@@ -278,10 +337,17 @@ export default function DocumentacionPage() {
       </div>
 
       {tab === "guias" ? (
-        <>
-          <div className="flex items-start gap-2 bg-amber-50 text-amber-700 text-xs rounded-xl px-4 py-3">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            <p>La transmisión electrónica directa a la DIAN (facturas, notas, documento soporte) todavía no está conectada. Mira el primer tema de esta lista para el detalle.</p>
+        <div className="w-full space-y-5">
+          <div className="flex items-start gap-3 bg-gradient-to-r from-amber-50 to-amber-50/40 border border-amber-100 text-amber-800 text-xs rounded-2xl p-4 shadow-sm">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center shrink-0 text-amber-700">
+              <AlertTriangle className="h-4.5 w-4.5" />
+            </div>
+            <div className="space-y-1">
+              <p className="font-bold text-amber-900">Nota sobre Transmisión Electrónica</p>
+              <p className="text-amber-700/90 leading-relaxed">
+                La transmisión electrónica directa a la DIAN (facturas, notas, documento soporte) todavía no está conectada. Mira el primer tema de esta lista para ver el detalle y las alternativas vigentes.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2.5">
@@ -289,7 +355,7 @@ export default function DocumentacionPage() {
               <AccordionItem key={t.id} topic={t} />
             ))}
           </div>
-        </>
+        </div>
       ) : (
         <FormulariosTab />
       )}
