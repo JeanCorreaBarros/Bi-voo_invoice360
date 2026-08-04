@@ -1,7 +1,7 @@
 "use client"
 
 import { PlcLoader } from "@/components/plc-loader"
-import { Plus, Search, Edit, Power, ChevronLeft, ChevronRight, Package, AlertTriangle, CheckCircle, XCircle, Tag, Layers } from "lucide-react"
+import { Plus, Search, Edit, Power, ChevronLeft, ChevronRight, Package, AlertTriangle, CheckCircle, XCircle, Tag, Layers, Copy } from "lucide-react"
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -30,6 +30,8 @@ interface Product {
   minStock?: number
   maxStock?: number | null
   active: boolean
+  parentId?: string | null
+  variantAttributes?: Record<string, string> | null
   createdAt: string
   updatedAt: string
 }
@@ -484,6 +486,166 @@ function ProductEditModal({ product, onClose, onProductUpdated }: {
 }
 
 /* ─────────────────────────────────────────────
+   VARIANTES
+───────────────────────────────────────────── */
+function VariantsDialog({ product, onClose }: {
+  product: Product | null
+  onClose: () => void
+}) {
+  const [variants, setVariants] = useState<Product[]>([])
+  const [loading, setLoading] = useState(false)
+  const [attrRows, setAttrRows] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }])
+  const [form, setForm] = useState({ sku: "", stock: "", price: "" })
+  const [saving, setSaving] = useState(false)
+
+  const fetchVariants = async () => {
+    if (!product) return
+    setLoading(true)
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const token = sessionStorage.getItem("token")
+      const res = await fetch(`${apiBase}products/${product.id}/variants`, {
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      })
+      const result = await res.json()
+      if (res.ok && result.ok) setVariants(result.data)
+    } catch {
+      // silencioso
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (product) {
+      fetchVariants()
+      setForm({ sku: "", stock: "", price: "" })
+      setAttrRows([{ key: "", value: "" }])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product])
+
+  const updateAttr = (idx: number, field: "key" | "value", value: string) => {
+    setAttrRows(attrRows.map((r, i) => (i === idx ? { ...r, [field]: value } : r)))
+  }
+  const addAttr = () => setAttrRows([...attrRows, { key: "", value: "" }])
+
+  const createVariant = async () => {
+    const attributes = Object.fromEntries(
+      attrRows.filter((r) => r.key.trim() && r.value.trim()).map((r) => [r.key.trim(), r.value.trim()])
+    )
+    if (!form.sku.trim() || Object.keys(attributes).length === 0) {
+      toast.error("SKU y al menos un atributo (ej: Talla=M) son obligatorios")
+      return
+    }
+    setSaving(true)
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
+      const token = sessionStorage.getItem("token")
+      const res = await fetch(`${apiBase}products/${product?.id}/variants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+        body: JSON.stringify({
+          sku: form.sku,
+          stock: form.stock ? Number(form.stock) : 0,
+          price: form.price ? Number(form.price) : undefined,
+          variantAttributes: attributes,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) throw new Error(result?.message || "No se pudo crear la variante")
+      toast.success("Variante creada")
+      setForm({ sku: "", stock: "", price: "" })
+      setAttrRows([{ key: "", value: "" }])
+      fetchVariants()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al crear variante")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!product} onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="mb-2">
+          <h3 className="text-lg font-black text-gray-900">Variantes de "{product?.name}"</h3>
+          <p className="text-xs text-gray-400">Cada variante es un producto independiente con su propio stock</p>
+        </div>
+
+        <div className="space-y-2 mb-5">
+          {loading ? (
+            <p className="text-sm text-gray-400">Cargando...</p>
+          ) : variants.length === 0 ? (
+            <p className="text-sm text-gray-400">Este producto todavía no tiene variantes</p>
+          ) : (
+            variants.map((v) => (
+              <div key={v.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-3 py-2 text-sm">
+                <div>
+                  <span className="font-mono text-xs text-gray-400 mr-2">{v.sku}</span>
+                  {v.variantAttributes &&
+                    Object.entries(v.variantAttributes as Record<string, string>).map(([k, val]) => (
+                      <span key={k} className="inline-block mr-1.5 px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[11px] font-semibold text-gray-600">
+                        {k}: {val}
+                      </span>
+                    ))}
+                </div>
+                <span className="font-bold text-gray-800">{v.stock} uds</span>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="border-t border-gray-100 pt-4 space-y-3">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Nueva variante</p>
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              placeholder="SKU (ej: CAM-001-M-ROJO)"
+              value={form.sku}
+              onChange={(e) => setForm({ ...form, sku: e.target.value })}
+              className={fieldClass}
+            />
+            <input
+              type="number" min="0"
+              placeholder="Stock inicial"
+              value={form.stock}
+              onChange={(e) => setForm({ ...form, stock: e.target.value })}
+              className={fieldClass}
+            />
+          </div>
+          <input
+            type="number" min="0"
+            placeholder="Precio (opcional, usa el del producto base)"
+            value={form.price}
+            onChange={(e) => setForm({ ...form, price: e.target.value })}
+            className={fieldClass}
+          />
+          <div className="space-y-2">
+            {attrRows.map((row, idx) => (
+              <div key={idx} className="flex gap-2">
+                <input placeholder="Atributo (ej: Talla)" value={row.key} onChange={(e) => updateAttr(idx, "key", e.target.value)} className={fieldClass} />
+                <input placeholder="Valor (ej: M)" value={row.value} onChange={(e) => updateAttr(idx, "value", e.target.value)} className={fieldClass} />
+              </div>
+            ))}
+            <button type="button" onClick={addAttr} className="text-xs font-bold text-[hsl(209,79%,35%)] hover:underline">
+              + agregar atributo
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={createVariant}
+            disabled={saving}
+            className="w-full h-11 bg-[hsl(209,79%,27%)] hover:bg-[hsl(209,79%,32%)] text-white font-bold rounded-xl disabled:opacity-50"
+          >
+            {saving ? "Creando..." : "Crear Variante"}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ─────────────────────────────────────────────
    MOBILE CARD
 ───────────────────────────────────────────── */
 function ProductCard({ product, onEdit, onToggleStatus, index }: {
@@ -609,6 +771,7 @@ export default function CatalogoProductosPage() {
   const [error, setError] = useState("")
   const [page, setPage] = useState(1)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [variantsProduct, setVariantsProduct] = useState<Product | null>(null)
   const ITEMS_PER_PAGE = 10
 
   const fetchProducts = async () => {
@@ -751,6 +914,15 @@ export default function CatalogoProductosPage() {
                           >
                             <Power className="h-4 w-4" />
                           </button>
+                          {product.type !== "KIT" && !product.parentId && (
+                            <button
+                              onClick={() => setVariantsProduct(product)}
+                              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                              title="Variantes"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -810,6 +982,7 @@ export default function CatalogoProductosPage() {
         onClose={() => setEditingProduct(null)}
         onProductUpdated={fetchProducts}
       />
+      <VariantsDialog product={variantsProduct} onClose={() => setVariantsProduct(null)} />
     </div>
   )
 }

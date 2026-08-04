@@ -1,7 +1,7 @@
 {
-  "name": "Invoice360 by Bi-voo",
-  "short_name": "Invoice360",
-  "description": "Sistema de facturacion y gestion de cobros - Invoice360 by Bi-voo",
+  "name": "Bi360 by Bi-voo",
+  "short_name": "Bi360",
+  "description": "Sistema de facturacion y gestion de cobros - Bi360 by Bi-voo",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#181c27",

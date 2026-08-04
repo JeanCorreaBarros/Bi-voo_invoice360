@@ -8,6 +8,8 @@ import {
   History,
   Warehouse,
   ArrowRightLeft,
+  PackagePlus,
+  CalendarClock,
 } from "lucide-react"
 
 const SIDEBAR_SECTIONS: {
@@ -33,6 +35,13 @@ const SIDEBAR_SECTIONS: {
     items: [
       { icon: Warehouse, label: "Bodegas", href: "/inventario/bodegas" },
       { icon: ArrowRightLeft, label: "Transferencias", href: "/inventario/transferencias" },
+    ],
+  },
+  {
+    title: "Kits y Lotes",
+    items: [
+      { icon: PackagePlus, label: "Kits y Combos", href: "/inventario/kits" },
+      { icon: CalendarClock, label: "Lotes", href: "/inventario/lotes" },
     ],
   },
 ]

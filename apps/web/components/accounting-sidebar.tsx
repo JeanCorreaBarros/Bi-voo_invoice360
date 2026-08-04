@@ -19,6 +19,9 @@ import {
   Percent,
   PiggyBank,
   History,
+  Activity,
+  FileQuestion,
+  Receipt,
 } from "lucide-react"
 
 const SIDEBAR_SECTIONS: {
@@ -42,6 +45,7 @@ const SIDEBAR_SECTIONS: {
       { icon: Scale, label: "Balance de Prueba", href: "/contabilidad/reportes" },
       { icon: Building2, label: "Balance General", href: "/contabilidad/balance-general" },
       { icon: TrendingUp, label: "Estado de Resultados", href: "/contabilidad/estado-resultados" },
+      { icon: Activity, label: "Indicadores Financieros", href: "/contabilidad/indicadores" },
       { icon: History, label: "Estados de Cuenta", href: "/contabilidad/estados-cuenta" },
     ],
   },
@@ -69,9 +73,14 @@ const SIDEBAR_SECTIONS: {
     items: [
       { icon: Settings2, label: "Configuración Contable", href: "/contabilidad/configuracion" },
       { icon: Percent, label: "Impuestos", href: "/contabilidad/impuestos" },
+      { icon: Receipt, label: "Declaración de Renta", href: "/contabilidad/declaracion-renta" },
       { icon: PiggyBank, label: "Presupuestos", href: "/contabilidad/presupuestos" },
       { icon: History, label: "Auditoría", href: "/contabilidad/auditoria" },
     ],
+  },
+  {
+    title: "Ayuda",
+    items: [{ icon: FileQuestion, label: "Documentación", href: "/contabilidad/documentacion" }],
   },
 ]
 

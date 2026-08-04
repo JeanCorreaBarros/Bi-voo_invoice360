@@ -179,7 +179,7 @@ export default function SoportePage() {
                 <Sparkles className="h-3.5 w-3.5" /> Centro de Ayuda
               </div>
               <h1 className="text-2xl md:text-3xl font-black text-white mb-2">¿Cómo podemos ayudarte hoy?</h1>
-              <p className="text-white/70 text-sm mb-6">Soporte de Invoice360, impulsado por Bi-voo.</p>
+              <p className="text-white/70 text-sm mb-6">Soporte de Bi360, impulsado por Bi-voo.</p>
               <div className="relative max-w-md">
                 <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <Input

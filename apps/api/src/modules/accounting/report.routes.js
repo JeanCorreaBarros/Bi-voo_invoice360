@@ -6,6 +6,7 @@ import {
   ledger,
   balanceSheet,
   incomeStatement,
+  financialIndicators,
   customerStatement,
   supplierStatement,
   trialBalanceExcel,
@@ -22,6 +23,7 @@ router.get('/journal', hasPermission('accounting.entry.read'), journalBook)
 router.get('/ledger', hasPermission('accounting.entry.read'), ledger)
 router.get('/balance-sheet', hasPermission('accounting.entry.read'), balanceSheet)
 router.get('/income-statement', hasPermission('accounting.entry.read'), incomeStatement)
+router.get('/financial-indicators', hasPermission('accounting.entry.read'), financialIndicators)
 router.get('/customer-statement', hasPermission('accounting.entry.read'), customerStatement)
 router.get('/supplier-statement', hasPermission('accounting.entry.read'), supplierStatement)
 

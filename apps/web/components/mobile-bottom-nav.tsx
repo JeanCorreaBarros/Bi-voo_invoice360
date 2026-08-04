@@ -181,7 +181,7 @@ export function MobileBottomNav() {
                     <span className="text-white font-bold text-sm">PLC</span>
                   </div>
                   <div>
-                    <p className="text-white font-bold text-sm leading-tight">Invoice360</p>
+                    <p className="text-white font-bold text-sm leading-tight">Bi360</p>
                     <p className="text-[hsl(228,5%,45%)] text-[10px]">by Bi-voo</p>
                   </div>
                 </div>

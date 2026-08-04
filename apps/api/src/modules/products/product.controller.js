@@ -8,6 +8,8 @@ import {
 } from './product.service.js'
 
 import { moveStock } from './inventory.service.js'
+import { setKitComponents, getKitComponents, listKits } from './kit.service.js'
+import { createVariant, listVariants } from './variant.service.js'
 
 export async function create(req, res) {
   const product = await createProduct(req.db, req.body)
@@ -68,4 +70,49 @@ export async function activate(req, res) {
 export async function deactivate(req, res) {
   const product = await deactivateProduct(req.db, req.params.id)
   res.json({ entity: product })
+}
+
+export async function getComponents(req, res) {
+  try {
+    const data = await getKitComponents(req.db, req.params.id)
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+export async function setComponents(req, res) {
+  try {
+    const data = await setKitComponents(req.db, req.params.id, req.body.components)
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+export async function getAllKits(req, res) {
+  try {
+    const data = await listKits(req.db)
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+export async function getVariants(req, res) {
+  try {
+    const data = await listVariants(req.db, req.params.id)
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+export async function addVariant(req, res) {
+  try {
+    const data = await createVariant(req.db, req.params.id, req.body)
+    res.status(201).json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
 }

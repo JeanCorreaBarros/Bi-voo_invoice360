@@ -17,10 +17,15 @@ import userRoutes from './modules/users/user.routes.js'
 import companyRoutes from './modules/company/company.routes.js'
 
 import supportTicketRoutes from './modules/supportTickets/supportTicket.routes.js'
+import creditNoteRoutes from './modules/creditNote/creditNote.routes.js'
+import debitNoteRoutes from './modules/debitNote/debitNote.routes.js'
+import supportDocumentRoutes from './modules/supportDocument/supportDocument.routes.js'
 
 import productRoutes from './modules/products/product.routes.js'
 
 import invoiceRoutes from './modules/invoices/invoice.routes.js'
+import recurringTemplateRoutes from './modules/invoices/recurringTemplate.routes.js'
+import scheduledInvoiceRoutes from './modules/invoices/scheduledInvoice.routes.js'
 
 import resolutionRoutes from "./modules/resolution/resolution.routes.js";
 
@@ -43,6 +48,7 @@ import paymentRoutes from "./modules/payments/payment.routes.js"
 
 import inventoryRoutes from "./modules/inventory/inventory.routes.js"
 import warehouseRoutes from "./modules/warehouses/warehouse.routes.js"
+import batchRoutes from "./modules/batches/batch.routes.js"
 
 import reportesRoutes from "./modules/reports/reportes.routes.js"
 
@@ -76,10 +82,15 @@ app.use('/api/users', userRoutes)
 
 app.use("/api/companies", companyRoutes)
 app.use("/api/support-tickets", supportTicketRoutes)
+app.use("/api/credit-notes", creditNoteRoutes)
+app.use("/api/debit-notes", debitNoteRoutes)
+app.use("/api/support-documents", supportDocumentRoutes)
 
 app.use('/api/products', productRoutes)
 
 app.use('/api/invoices', invoiceRoutes)
+app.use('/api/recurring-invoice-templates', recurringTemplateRoutes)
+app.use('/api/scheduled-invoices', scheduledInvoiceRoutes)
 
 app.use("/api/resolutions", resolutionRoutes);
 
@@ -105,6 +116,7 @@ app.use("/api", paymentRoutes)
 
 app.use("/api", inventoryRoutes)
 app.use("/api/warehouses", warehouseRoutes)
+app.use("/api/batches", batchRoutes)
 
 
 

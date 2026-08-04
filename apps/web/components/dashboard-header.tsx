@@ -5,8 +5,6 @@ import { useAuth } from "@/lib/auth-context"
 import { useRouter, usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 
-import { useTheme } from "next-themes"
-
 import {
   FileText,
   CreditCard,
@@ -27,12 +25,12 @@ import {
   Palette,
   Rocket,
   User,
-  Moon,
-  Sun,
   Boxes,
   LifeBuoy,
+  FileMinus,
+  FilePlus2,
+  FileStack,
 } from "lucide-react"
-import { Switch } from "@/components/ui/switch"
 
 import {
   DropdownMenu,
@@ -54,6 +52,9 @@ const navItems = [
   { icon: BarChart3, label: "Reportes", section: "gestion", href: "/reportes" },
   { icon: Users, label: "Clientes", section: "gestion", href: "/clientes" },
   { icon: Calculator, label: "Proveedores", section: "gestion", href: "/proveedores" },
+  { icon: FileMinus, label: "Notas Crédito", section: "gestion", href: "/notas-credito" },
+  { icon: FilePlus2, label: "Notas Débito", section: "gestion", href: "/notas-debito" },
+  { icon: FileStack, label: "Documento Soporte", section: "gestion", href: "/documento-soporte" },
   { icon: CreditCard, label: "Usuarios", section: "gestion", href: "/usuarios" },
   { icon: Settings, label: "Configuración", section: "otros", href: "/configuracion" },
   { icon: HelpCircle, label: "Centro de Ayuda", section: "otros", href: "/ayuda" },
@@ -144,7 +145,7 @@ function DesktopSidebar({
                   <Rocket className="w-5 h-5 text-[hsl(209,79%,55%)]" strokeWidth={2.5} />
                 </div>
                 <div>
-                  <p className="text-white font-bold text-sm leading-tight">Invoice360</p>
+                  <p className="text-white font-bold text-sm leading-tight">Bi360</p>
                   <p className="text-[hsl(228,5%,45%)] text-[10px]">by Bi-voo</p>
                 </div>
               </div>
@@ -243,14 +244,9 @@ export function DashboardHeader() {
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isActive = useIsActive()
-  const { theme, setTheme } = useTheme()
-  const [mountedTheme, setMountedTheme] = useState(false)
-  useEffect(() => { setMountedTheme(true) }, [])
-  const isDark = mountedTheme && theme === "dark"
 
   const handleNavigation = (href: string) => router.push(href)
   const handleLogout = () => { logout(); router.push("/") }
-  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "soporte@plasticoslc.com"
 
   return (
     <>
@@ -275,7 +271,7 @@ export function DashboardHeader() {
                 <Rocket className="w-5 h-5 text-[hsl(209,79%,35%)]" />
               </div>
               <span className="text-[hsl(209,79%,27%)] font-bold text-sm font-sans">
-                Invoice360
+                Bi360
               </span>
             </div>
 
@@ -343,23 +339,12 @@ export function DashboardHeader() {
                     <span>Configuración</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => { window.location.href = `mailto:${supportEmail}` }}
+                    onClick={() => handleNavigation("/ayuda")}
                     className="cursor-pointer rounded-lg"
                   >
                     <HelpCircle className="mr-2 h-4 w-4" />
                     <span>Centro de Ayuda</span>
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <div className="flex items-center justify-between px-2 py-2">
-                    <span className="flex items-center gap-2 text-sm text-gray-700">
-                      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                      Modo Oscuro
-                    </span>
-                    <Switch
-                      checked={isDark}
-                      onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-                    />
-                  </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer rounded-lg text-red-600 focus:text-red-600 focus:bg-red-50">
                     <LogOut className="mr-2 h-4 w-4" />
@@ -483,7 +468,7 @@ export function MobileBottomNav() {
                     <Rocket className="w-5 h-5 text-[hsl(209,79%,55%)]" strokeWidth={2.5} />
                   </div>
                   <div>
-                    <p className="text-white font-bold text-sm leading-tight">Invoice360</p>
+                    <p className="text-white font-bold text-sm leading-tight">Bi360</p>
                     <p className="text-[hsl(228,5%,45%)] text-[10px]">by Bi-voo</p>
                   </div>
                 </div>

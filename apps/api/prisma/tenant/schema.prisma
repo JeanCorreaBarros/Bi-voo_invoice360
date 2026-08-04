@@ -39,12 +39,17 @@ model User {
   cashMovements CashMovement[] // movimientos de caja
 
   creditNotes CreditNote[] // notas crédito creadas
+  debitNotes  DebitNote[] // notas débito creadas
+  supportDocuments SupportDocument[] // documentos soporte creados
 
   priceChanges ProductPriceHistory[] // cambios de precio realizados
 
   journalEntries JournalEntry[] // comprobantes contables creados
   purchasePayments PurchasePayment[] // pagos a proveedores registrados
   stockTransfers StockTransfer[] // transferencias de inventario registradas
+
+  recurringInvoiceTemplates RecurringInvoiceTemplate[]
+  scheduledInvoices         ScheduledInvoice[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -107,6 +112,7 @@ enum ProductType {
   SERVICE
   RAW_MATERIAL
   FINISHED_PRODUCT
+  KIT // producto virtual: al venderse, descuenta sus componentes (ProductComponent)
 }
 
 model Product {
@@ -126,14 +132,82 @@ model Product {
   maxStock    Int?
   active      Boolean     @default(true)
 
+  // Variantes: cualquier producto puede tener "hijos" que representan sus
+  // variantes (talla, color, sabor, presentación...). Cada variante es un
+  // Product completo con su propio SKU/stock/precio — reutiliza todo el
+  // motor de inventario sin necesitar un modelo aparte. variantAttributes
+  // es libre (clave/valor) para que cada empresa defina sus propias
+  // dimensiones de variación sin un esquema rígido.
+  parentId          String?
+  parent            Product?  @relation("ProductVariants", fields: [parentId], references: [id])
+  variants          Product[] @relation("ProductVariants")
+  variantAttributes Json?
+
+  // Lotes: opt-in por producto (perecederos, farma, etc.). Si está apagado
+  // el producto se maneja como stock simple, igual que hoy.
+  tracksBatches Boolean        @default(false)
+  batches       ProductBatch[]
+
+  // Kits/combos: este producto (type = KIT) se arma con estos componentes;
+  // partOfKits es la relación inversa (en qué kits participa como pieza).
+  components KitComponent[] @relation("KitComponents")
+  partOfKits KitComponent[] @relation("ComponentOfKits")
+
   movements       InventoryMovement[]
   invoicesDetails InvoiceDetail[]
   purchaseDetails PurchaseDetail[]
   priceHistory    ProductPriceHistory[]
   stockTransfers  StockTransfer[]
+  debitNoteDetails       DebitNoteDetail[]
+  supportDocumentDetails SupportDocumentDetail[]
+  creditNoteDetails      CreditNoteDetail[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Receta de un kit/combo: qué productos (y cuánto de cada uno) se
+// descuentan cuando se vende una unidad del kit.
+model KitComponent {
+  id String @id @default(cuid())
+
+  kitProductId String
+  kitProduct   Product @relation("KitComponents", fields: [kitProductId], references: [id])
+
+  componentProductId String
+  componentProduct   Product @relation("ComponentOfKits", fields: [componentProductId], references: [id])
+
+  quantity Int @default(1)
+
+  createdAt DateTime @default(now())
+
+  @@unique([kitProductId, componentProductId])
+}
+
+// Lote físico de un producto (tracksBatches = true): cantidad, fabricación
+// y vencimiento. Las ventas consumen lotes por FEFO (el que vence primero,
+// sale primero); los lotes sin fecha de vencimiento se consumen de último.
+model ProductBatch {
+  id Int @id @default(autoincrement())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  batchNumber     String
+  manufactureDate DateTime?
+  expiryDate      DateTime?
+
+  initialQuantity Int
+  quantity        Int // disponible actualmente en este lote
+
+  active Boolean @default(true)
+
+  movements InventoryMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, batchNumber])
 }
 
 model InventoryMovement {
@@ -151,6 +225,9 @@ model InventoryMovement {
 
   warehouseId String?
   warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  batchId Int?
+  batch   ProductBatch? @relation(fields: [batchId], references: [id])
 
   // =========================
   // AUDITORÍA
@@ -289,6 +366,11 @@ model Invoice {
   payments Payment[]
 
   creditNotes CreditNote[]
+  debitNotes  DebitNote[]
+
+  recurringTemplateId String?
+  recurringTemplate    RecurringInvoiceTemplate? @relation(fields: [recurringTemplateId], references: [id])
+  scheduledInvoice     ScheduledInvoice?
 
   @@unique([orderPrefix, orderId])
   @@map("invoices")
@@ -328,6 +410,110 @@ model Resolution {
   createdAt     DateTime @default(now())
 
   @@map("resolutions")
+}
+
+enum RecurringFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  BIMONTHLY
+  YEARLY
+}
+
+// Plantilla de facturación recurrente: guarda los mismos campos que espera
+// createInvoice() (ver invoice.service.js) más un snapshot de items en JSON
+// (Invoice no tiene FK a Customer, así que no hay de dónde más "hidratar"
+// los datos del receptor). El job de apps/api/src/jobs/invoiceScheduler.js
+// la usa para generar facturas reales cuando nextRunAt vence.
+model RecurringInvoiceTemplate {
+  id        String             @id @default(cuid())
+  name      String
+  active    Boolean            @default(true)
+  frequency RecurringFrequency
+  nextRunAt DateTime
+  lastRunAt DateTime?
+  lastError String?
+  runCount  Int                @default(0)
+
+  orderPrefix String
+  userId      String
+  user        User    @relation(fields: [userId], references: [id])
+  sellerId    String?
+
+  orderReceiverName    String
+  orderReceiverNit     String
+  orderReceiverAddress String
+  orderReceiverPhone   String?
+  orderReceiverEmail   String?
+
+  paymentForms      Int?
+  paymentMethods    Int?
+  plazoPago         String?
+  orderTaxPer       String?
+  ciiu              Int?
+  autoretencion     Int?
+  globalDiscount    Float?
+  reteFuentePercent Float?
+  reteIcaPercent    Float?
+  note              String?
+
+  items Json
+
+  generatedInvoices Invoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("recurring_invoice_templates")
+}
+
+enum ScheduledInvoiceStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+// Factura programada para una fecha futura puntual (no recurrente). El
+// mismo job la recoge cuando scheduledFor vence y llama a createInvoice();
+// invoiceId queda enlazado a la factura real generada.
+model ScheduledInvoice {
+  id           String                 @id @default(cuid())
+  scheduledFor DateTime
+  status       ScheduledInvoiceStatus @default(PENDING)
+  errorMessage String?
+
+  orderPrefix String
+  userId      String
+  user        User    @relation(fields: [userId], references: [id])
+  sellerId    String?
+
+  orderReceiverName    String
+  orderReceiverNit     String
+  orderReceiverAddress String
+  orderReceiverPhone   String?
+  orderReceiverEmail   String?
+
+  paymentForms      Int?
+  paymentMethods    Int?
+  plazoPago         String?
+  orderTaxPer       String?
+  ciiu              Int?
+  autoretencion     Int?
+  globalDiscount    Float?
+  reteFuentePercent Float?
+  reteIcaPercent    Float?
+  note              String?
+
+  items Json
+
+  invoiceId Int?     @unique
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("scheduled_invoices")
 }
 
 enum PurchaseStatus {
@@ -523,8 +709,91 @@ model CreditNoteDetail {
   creditNote   CreditNote @relation(fields: [creditNoteId], references: [id])
 
   productId String
-  quantity  Float
-  price     Float
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity Float
+  price    Float
+}
+
+// Nota débito: aumenta el valor de una factura ya emitida (cobros
+// adicionales, intereses de mora, correcciones al alza). A diferencia de
+// la nota crédito, no afecta inventario — es un ajuste financiero.
+model DebitNote {
+  id Int @id @default(autoincrement())
+
+  invoiceId Int
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+
+  reason  String
+  concept String? // ej: "Interés de mora", "Cobro adicional no facturado"
+
+  amount Decimal @db.Decimal(14, 2)
+
+  createdBy String?
+  user      User?   @relation(fields: [createdBy], references: [id])
+
+  details DebitNoteDetail[]
+
+  createdAt DateTime @default(now())
+}
+
+model DebitNoteDetail {
+  id Int @id @default(autoincrement())
+
+  debitNoteId Int
+  debitNote   DebitNote @relation(fields: [debitNoteId], references: [id])
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  description String
+  quantity    Float @default(1)
+  price       Float
+}
+
+// Documento soporte: lo emite la EMPRESA (no el proveedor) cuando compra
+// bienes/servicios a alguien no obligado a facturar (persona natural del
+// régimen simplificado, etc.) — Resolución DIAN 000167 de 2021. El envío
+// real a la DIAN vive en la Fase B (integración DIAN); esto deja el
+// registro y el documento interno listos para cuando esa fase conecte.
+model SupportDocument {
+  id Int @id @default(autoincrement())
+
+  supplierName   String
+  supplierNit    String?
+  supplierIdType String? @default("CC") // CC, CE, NIT...
+
+  date    DateTime @default(now())
+  concept String
+
+  subtotal Float
+  tax      Float  @default(0)
+  total    Float
+
+  status String @default("DRAFT") // DRAFT | ISSUED | CANCELLED
+
+  details SupportDocumentDetail[]
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SupportDocumentDetail {
+  id Int @id @default(autoincrement())
+
+  supportDocumentId Int
+  supportDocument   SupportDocument @relation(fields: [supportDocumentId], references: [id])
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  description String
+  quantity    Float @default(1)
+  price       Float
+  total       Float
 }
 
 model ProductPriceHistory {

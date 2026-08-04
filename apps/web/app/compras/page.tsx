@@ -2,12 +2,22 @@
 
 import { DashboardHeader } from "@/components/dashboard-header"
 import { useState, useEffect, useRef } from "react"
-import { Plus, Trash2, X, Edit2, Search, ChevronLeft, ChevronRight, User, Hash, Phone, Mail, MapPin, Box, DollarSign, FileText } from "lucide-react"
+import { Plus, Trash2, X, Edit2, Search, ChevronLeft, ChevronRight, User, Hash, Phone, Mail, MapPin, Box, DollarSign, FileText, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import toast from "react-hot-toast"
 import { MobileBottomNav } from "@/components/mobile-bottom-nav"
 import { motion, AnimatePresence } from "framer-motion"
+import { useAiEvent } from "@/hooks/use-ai-event"
+import { AiSuggestButton } from "@/components/ai-suggest-button"
+import { AiResultPanel } from "@/components/ai-result-panel"
+
+const DEFAULT_PROMPT_PREDICCION_COMPRAS =
+  "Según el consumo/ventas recientes y el stock actual, estima qué productos habrá que comprar en las próximas semanas y en qué cantidad aproximada."
+const DEFAULT_PROMPT_ANALISIS_PRECIOS =
+  "Analiza el histórico de precios de compra de este producto y explica la tendencia (subiendo, bajando, estable) y si el precio actual es razonable."
+const DEFAULT_PROMPT_RECOMENDACION_PROVEEDOR =
+  "Con base en el historial de compras (precio, frecuencia, cumplimiento), recomienda el mejor proveedor para esta compra."
 
 interface Product {
   id: string
@@ -826,6 +836,11 @@ export default function ComprasPage() {
   const itemsPerPage = 10
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api"
 
+  const aiPrediccion = useAiEvent("compras_prediccion_compras", DEFAULT_PROMPT_PREDICCION_COMPRAS)
+  const aiPrecios = useAiEvent("compras_analisis_precios", DEFAULT_PROMPT_ANALISIS_PRECIOS)
+  const aiProveedor = useAiEvent("compras_recomendacion_proveedor", DEFAULT_PROMPT_RECOMENDACION_PROVEEDOR)
+  const [comprasAiResult, setComprasAiResult] = useState<string | null>(null)
+
   const normalizeText = (text: string) =>
     text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 
@@ -871,6 +886,24 @@ export default function ComprasPage() {
     )
   })
 
+  const buildPurchasesContext = () => {
+    const bySupplier = new Map<string, { count: number; total: number }>()
+    for (const p of purchases) {
+      const cur = bySupplier.get(p.supplierName) || { count: 0, total: 0 }
+      cur.count += 1
+      cur.total += Number(p.total || 0)
+      bySupplier.set(p.supplierName, cur)
+    }
+    const suppliersSummary = [...bySupplier.entries()]
+      .map(([name, s]) => `${name}: ${s.count} compra(s), total ${s.total.toLocaleString("es-CO")}`)
+      .join("; ")
+    const recent = purchases
+      .slice(0, 15)
+      .map((p) => `${p.supplierName} - ${new Date(p.date || p.createdAt).toLocaleDateString("es-CO")} - $${Number(p.total).toLocaleString("es-CO")}`)
+      .join("; ")
+    return `Proveedores (${bySupplier.size}): ${suppliersSummary}\nCompras recientes: ${recent}`
+  }
+
   const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage)
   const paginatedPurchases = filteredPurchases.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
@@ -905,6 +938,27 @@ export default function ComprasPage() {
               <span className="sm:hidden">Nueva</span>
             </Button>
           </div>
+
+          {(aiPrediccion.enabled || aiPrecios.enabled || aiProveedor.enabled) && (
+            <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-5 mb-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-[hsl(209,79%,35%)]" />
+                <p className="text-sm font-bold text-gray-900">Compras Inteligentes</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {aiPrediccion.enabled && (
+                  <AiSuggestButton prompt={aiPrediccion.prompt} context={buildPurchasesContext()} onResult={setComprasAiResult} label="Predecir compras futuras" />
+                )}
+                {aiPrecios.enabled && (
+                  <AiSuggestButton prompt={aiPrecios.prompt} context={buildPurchasesContext()} onResult={setComprasAiResult} label="Analizar precios históricos" />
+                )}
+                {aiProveedor.enabled && (
+                  <AiSuggestButton prompt={aiProveedor.prompt} context={buildPurchasesContext()} onResult={setComprasAiResult} label="Recomendar mejor proveedor" />
+                )}
+              </div>
+              {comprasAiResult && <AiResultPanel text={comprasAiResult} onClose={() => setComprasAiResult(null)} color="blue" />}
+            </div>
+          )}
 
           <div className="bg-white p-4 rounded-lg mb-6">
             <div className="relative rounded-lg w-full">

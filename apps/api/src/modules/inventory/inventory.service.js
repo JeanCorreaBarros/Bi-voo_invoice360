@@ -128,10 +128,14 @@ export async function getStock(db, { search } = {}) {
 
   return products.map(p => {
     const value = Number(p.stock) * Number(p.cost || 0)
+    // Un KIT no tiene stock propio (se arma de sus componentes al vender):
+    // no tiene sentido marcarlo "agotado"/"bajo" por su campo stock.
     let status = "normal"
-    if (p.stock <= 0) status = "agotado"
-    else if (p.stock <= (p.minStock || 0)) status = "bajo"
-    else if (p.maxStock && p.stock > p.maxStock) status = "sobrestock"
+    if (p.type !== "KIT") {
+      if (p.stock <= 0) status = "agotado"
+      else if (p.stock <= (p.minStock || 0)) status = "bajo"
+      else if (p.maxStock && p.stock > p.maxStock) status = "sobrestock"
+    }
 
     return { ...p, value, status }
   })
@@ -140,7 +144,10 @@ export async function getStock(db, { search } = {}) {
 
 export async function getDashboard(db) {
 
+  // Los KIT no llevan stock propio, así que quedan fuera de las alertas de
+  // agotado/bajo/sobrestock (su disponibilidad depende de sus componentes).
   const products = await db.product.findMany({
+    where: { type: { not: "KIT" } },
     select: {
       id: true, name: true, sku: true, stock: true, cost: true,
       minStock: true, maxStock: true, active: true

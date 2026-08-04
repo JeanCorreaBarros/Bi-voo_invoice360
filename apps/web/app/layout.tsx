@@ -12,13 +12,13 @@ import { AiChatBubble } from "@/components/ai-chat-bubble"
 const _inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 
 export const metadata: Metadata = {
-  title: "Invoice360 by Bi-voo",
-  description: "Sistema de facturación y gestión de cobros — Invoice360 by Bi-voo",
+  title: "Bi360 by Bi-voo",
+  description: "Sistema de facturación y gestión de cobros — Bi360 by Bi-voo",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Invoice360",
+    title: "Bi360",
   },
   icons: {
     icon: "/icon.ico",

@@ -2,8 +2,25 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Scale, BookText, ListTree, ArrowRight, TrendingUp, TrendingDown, Wallet, Landmark } from "lucide-react"
+import { Scale, BookText, ListTree, ArrowRight, TrendingUp, TrendingDown, Wallet, Landmark, Sparkles, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { useAiEvent } from "@/hooks/use-ai-event"
+import { AiSuggestButton } from "@/components/ai-suggest-button"
+import { AiResultPanel } from "@/components/ai-result-panel"
+
+const DEFAULT_PROMPT_DETECCION_FRAUDE =
+  "Revisa los comprobantes recientes y señala patrones sospechosos (montos redondos repetidos, mismo usuario y cuenta en horarios inusuales, reversos seguidos de reingresos, etc.) que ameriten revisión manual. No acuses, solo señala qué revisar y por qué."
+const DEFAULT_PROMPT_BUSQUEDA_NATURAL =
+  "Responde la pregunta del usuario usando únicamente los datos contables que te compartí como contexto. Si no hay suficiente información, dilo explícitamente en vez de inventar cifras."
+const DEFAULT_PROMPT_FLUJO_CAJA =
+  "Con base en el histórico de ingresos y egresos, proyecta el flujo de caja de los próximos meses."
+const DEFAULT_PROMPT_LIQUIDEZ =
+  "Con base en el flujo de caja histórico, cartera por cobrar y cuentas por pagar, estima la liquidez esperada en las próximas semanas."
+const DEFAULT_PROMPT_DEFICIT =
+  "Revisa los compromisos de pago próximos contra el saldo e ingresos esperados, y alerta si hay riesgo de déficit de caja, indicando cuándo y de cuánto."
+const DEFAULT_PROMPT_PROYECCION_IMPUESTOS =
+  "Con base en las ventas, compras e IVA del período, estima aproximadamente cuánto habrá que pagar de impuestos en el próximo vencimiento."
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://plasticoslc.com/api/"
 
@@ -31,6 +48,18 @@ export default function ContabilidadPage() {
   const [trialRows, setTrialRows] = useState<TrialRow[]>([])
   const [income, setIncome] = useState<IncomeStatement | null>(null)
   const [balance, setBalance] = useState<BalanceSheet | null>(null)
+  const [recentEntries, setRecentEntries] = useState<any[]>([])
+
+  const aiFraude = useAiEvent("cont_deteccion_fraude", DEFAULT_PROMPT_DETECCION_FRAUDE)
+  const aiBusqueda = useAiEvent("cont_busqueda_natural", DEFAULT_PROMPT_BUSQUEDA_NATURAL)
+  const aiFlujoCaja = useAiEvent("cont_proyeccion_flujo_caja", DEFAULT_PROMPT_FLUJO_CAJA)
+  const aiLiquidez = useAiEvent("tesoreria_prediccion_liquidez", DEFAULT_PROMPT_LIQUIDEZ)
+  const aiDeficit = useAiEvent("tesoreria_alertas_deficit", DEFAULT_PROMPT_DEFICIT)
+  const aiImpuestos = useAiEvent("tesoreria_proyeccion_impuestos", DEFAULT_PROMPT_PROYECCION_IMPUESTOS)
+  const [treasuryResult, setTreasuryResult] = useState<string | null>(null)
+  const [aiPanelResult, setAiPanelResult] = useState<string | null>(null)
+  const [question, setQuestion] = useState("")
+  const [asking, setAsking] = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -39,12 +68,13 @@ export default function ContabilidadPage() {
         const token = getToken()
         const headers = { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
 
-        const [accountsRes, entriesRes, trialRes, incomeRes, balanceRes] = await Promise.all([
+        const [accountsRes, entriesRes, trialRes, incomeRes, balanceRes, recentRes] = await Promise.all([
           fetch(`${apiBase}accounting/accounts`, { headers }),
           fetch(`${apiBase}accounting/entries?limit=1`, { headers }),
           fetch(`${apiBase}accounting/reports/trial-balance`, { headers }),
           fetch(`${apiBase}accounting/reports/income-statement`, { headers }),
           fetch(`${apiBase}accounting/reports/balance-sheet`, { headers }),
+          fetch(`${apiBase}accounting/entries?limit=20`, { headers }),
         ])
 
         const accounts = await accountsRes.json()
@@ -52,12 +82,14 @@ export default function ContabilidadPage() {
         const trial = await trialRes.json()
         const incomeData = await incomeRes.json()
         const balanceData = await balanceRes.json()
+        const recent = await recentRes.json()
 
         setAccountsCount(accounts?.data?.length ?? 0)
         setEntriesCount(entries?.meta?.total ?? 0)
         setTrialRows(trial?.data ?? [])
         setIncome(incomeData?.data ?? null)
         setBalance(balanceData?.data ?? null)
+        setRecentEntries(recent?.data ?? [])
       } catch (err) {
         console.error(err)
       } finally {
@@ -73,6 +105,36 @@ export default function ContabilidadPage() {
     .filter((r) => Number(r.debit) > 0 || Number(r.credit) > 0)
     .sort((a, b) => Number(b.debit) + Number(b.credit) - (Number(a.debit) + Number(a.credit)))
     .slice(0, 5)
+
+  const buildFinancialContext = () => [
+    `Cuentas en el plan de cuentas: ${accountsCount}`,
+    `Comprobantes registrados: ${entriesCount}`,
+    income ? `Ingresos: ${money(income.totalIncome)}, Costo de ventas: ${money(income.totalCost)}, Gastos: ${money(income.totalExpense)}, Utilidad neta: ${money(income.netIncome)}` : "",
+    balance ? `Activo total: ${money(balance.totalAssets)}, Pasivo total: ${money(balance.totalLiabilities)}, Patrimonio: ${money(balance.totalEquity)}` : "",
+    `Comprobantes recientes: ${recentEntries.map((e: any) => `#${e.number} ${e.description || ""} (${new Date(e.date).toLocaleDateString("es-CO")})`).join("; ")}`,
+  ].filter(Boolean).join("\n")
+
+  const askQuestion = async () => {
+    if (!question.trim() || asking) return
+    setAsking(true)
+    try {
+      const token = getToken()
+      const res = await fetch(`${apiBase}ai/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: token ? `Bearer ${token}` : "" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: `${aiBusqueda.prompt}\n\nDatos contables:\n${buildFinancialContext()}\n\nPregunta: ${question}` }],
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok || !result.ok) throw new Error(result?.message || "Error al consultar la IA")
+      setAiPanelResult(result.data.reply || "")
+    } catch (e) {
+      setAiPanelResult(e instanceof Error ? `No se pudo consultar la IA: ${e.message}` : "No se pudo consultar la IA")
+    } finally {
+      setAsking(false)
+    }
+  }
 
   const cards = [
     { label: "Cuentas en el Plan de Cuentas", value: String(accountsCount), icon: ListTree, href: "/contabilidad/plan-cuentas" },
@@ -204,6 +266,66 @@ export default function ContabilidadPage() {
           </div>
         )}
       </div>
+
+      {!loading && (aiBusqueda.enabled || aiFraude.enabled) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-[hsl(209,79%,35%)]" />
+            <p className="text-sm font-bold text-gray-900">Asistente de IA Contable</p>
+          </div>
+
+          {aiBusqueda.enabled && (
+            <div className="flex items-center gap-2">
+              <Input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") askQuestion() }}
+                placeholder="Pregúntale algo a tus datos contables (ej: ¿cómo va la utilidad este mes?)"
+                className="h-11 flex-1"
+              />
+              <Button onClick={askQuestion} disabled={asking || !question.trim()} className="h-11 bg-[hsl(209,79%,35%)] hover:bg-[hsl(209,79%,30%)] gap-1.5 shrink-0">
+                <Send className="h-4 w-4" /> {asking ? "..." : "Preguntar"}
+              </Button>
+            </div>
+          )}
+
+          {aiFraude.enabled && (
+            <AiSuggestButton
+              prompt={aiFraude.prompt}
+              context={buildFinancialContext()}
+              onResult={setAiPanelResult}
+              label="Detectar riesgos en comprobantes recientes"
+              className="gap-1.5"
+            />
+          )}
+
+          {aiPanelResult && <AiResultPanel text={aiPanelResult} onClose={() => setAiPanelResult(null)} color="blue" />}
+        </div>
+      )}
+
+      {!loading && (aiFlujoCaja.enabled || aiLiquidez.enabled || aiDeficit.enabled || aiImpuestos.enabled) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-[hsl(209,79%,35%)]" />
+            <p className="text-sm font-bold text-gray-900">Tesorería con IA</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {aiFlujoCaja.enabled && (
+              <AiSuggestButton prompt={aiFlujoCaja.prompt} context={buildFinancialContext()} onResult={setTreasuryResult} label="Proyectar flujo de caja" />
+            )}
+            {aiLiquidez.enabled && (
+              <AiSuggestButton prompt={aiLiquidez.prompt} context={buildFinancialContext()} onResult={setTreasuryResult} label="Predecir liquidez" />
+            )}
+            {aiDeficit.enabled && (
+              <AiSuggestButton prompt={aiDeficit.prompt} context={buildFinancialContext()} onResult={setTreasuryResult} label="Alertas de déficit" />
+            )}
+            {aiImpuestos.enabled && (
+              <AiSuggestButton prompt={aiImpuestos.prompt} context={buildFinancialContext()} onResult={setTreasuryResult} label="Proyectar impuestos" />
+            )}
+          </div>
+          {treasuryResult && <AiResultPanel text={treasuryResult} onClose={() => setTreasuryResult(null)} color="purple" />}
+        </div>
+      )}
 
       {!loading && entriesCount === 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-center justify-between flex-wrap gap-4">

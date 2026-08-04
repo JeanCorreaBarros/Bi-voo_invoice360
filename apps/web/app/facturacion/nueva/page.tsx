@@ -3,11 +3,16 @@
 import { useState, useEffect, useRef } from "react"
 import { useAiEvent } from "@/hooks/use-ai-event"
 import { AiSuggestButton } from "@/components/ai-suggest-button"
+import { AiResultPanel } from "@/components/ai-result-panel"
 
 // Debe coincidir con el prompt por defecto del catálogo en
 // apps/web/app/configuracion/page.tsx (AI_EVENTS).
 const DEFAULT_PROMPT_CLASIFICACION_INGRESO =
     "Analiza la descripción del producto o servicio facturado y sugiere la cuenta contable de ingresos más adecuada del Plan de Cuentas."
+const DEFAULT_PROMPT_VALIDACION_FACTURA =
+    "Revisa la factura completa (ítems, cantidades, precios, impuestos, totales y datos del cliente) y señala cualquier inconsistencia antes de emitirla."
+const DEFAULT_PROMPT_SUGERENCIA_DESCUENTO =
+    "Según el historial del cliente y el monto de la factura, sugiere si aplicar un descuento y de cuánto, justificando brevemente."
 // ...existing code...
 
 interface Product {
@@ -107,6 +112,9 @@ export default function NuevaFacturaPage() {
     const [showProductDropdown, setShowProductDropdown] = useState<number | null>(null); // index del item que muestra el dropdown
     const [itemAiSuggestions, setItemAiSuggestions] = useState<Record<number, string>>({})
     const aiClasificacionIngreso = useAiEvent("fact_clasificacion_ingreso", DEFAULT_PROMPT_CLASIFICACION_INGRESO)
+    const aiValidacionFactura = useAiEvent("fact_validacion_factura", DEFAULT_PROMPT_VALIDACION_FACTURA)
+    const aiSugerenciaDescuento = useAiEvent("fact_sugerencia_descuento", DEFAULT_PROMPT_SUGERENCIA_DESCUENTO)
+    const [aiInvoiceResult, setAiInvoiceResult] = useState<string | null>(null)
     const [currentStep, setCurrentStep] = useState(1); // 1: Datos, 2: Ítems, 3: Resumen
     const [items, setItems] = useState<InvoiceItem[]>([
         {
@@ -2202,6 +2210,34 @@ export default function NuevaFacturaPage() {
                             onChange={(e) => setNotes(e.target.value)}
                         ></textarea>
                     </motion.div>
+
+                    {/* Validación con IA antes de emitir */}
+                    {(aiValidacionFactura.enabled || aiSugerenciaDescuento.enabled) && (
+                        <motion.div variants={itemVariants} className={`mt-6 border-t pt-4 ${currentStep === 3 ? "" : "hidden md:block"}`}>
+                            <h3 className="font-semibold mb-2">Asistente de IA</h3>
+                            <div className="flex flex-wrap gap-2 mb-2">
+                                {aiValidacionFactura.enabled && (
+                                    <AiSuggestButton
+                                        prompt={aiValidacionFactura.prompt}
+                                        context={`Cliente: ${cliente} (${identificacion})\nÍtems: ${items.map(i => `${i.descripcion} x${i.cantidad} @ ${i.precio}`).join("; ")}\nSubtotal: ${subtotal}\nDescuento: ${descuento}\nImpuestos: ${impuestos}\nTotal: ${total}`}
+                                        onResult={setAiInvoiceResult}
+                                        label="Validar factura con IA"
+                                    />
+                                )}
+                                {aiSugerenciaDescuento.enabled && (
+                                    <AiSuggestButton
+                                        prompt={aiSugerenciaDescuento.prompt}
+                                        context={`Cliente: ${cliente} (${identificacion})\nTotal de la factura: ${total}\nSubtotal: ${subtotal}`}
+                                        onResult={setAiInvoiceResult}
+                                        label="Sugerir descuento"
+                                    />
+                                )}
+                            </div>
+                            {aiInvoiceResult && (
+                                <AiResultPanel text={aiInvoiceResult} onClose={() => setAiInvoiceResult(null)} color="blue" />
+                            )}
+                        </motion.div>
+                    )}
 
                     {/* Spacer to prevent content from being hidden behind sticky nav */}
                     <div className="md:hidden h-16"></div>

@@ -74,6 +74,19 @@ export async function getByNumber(req, res) {
 }
 
 
+export async function createBulk(req, res) {
+  try {
+    const { invoices } = req.body
+    if (!Array.isArray(invoices) || invoices.length === 0) {
+      return res.status(400).json({ ok: false, message: 'invoices debe ser un arreglo con al menos un elemento' })
+    }
+    const result = await service.createBulkInvoices(req.db, invoices)
+    res.json({ ok: true, ...result })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
 export async function cancel(req, res) {
   try {
     const { prefix, number } = req.params

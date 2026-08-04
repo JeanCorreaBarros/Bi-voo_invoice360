@@ -238,7 +238,7 @@ export default function LoginDesignLab() {
                       <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-xl">
                         <Rocket className="h-9 w-9 text-[hsl(213,88%,45%)]" strokeWidth={1.5} />
                       </div>
-                      <p className="text-sm font-bold">Invoice360</p>
+                      <p className="text-sm font-bold">Bi360</p>
                     </div>
                   </div>
                 ) : (
@@ -257,7 +257,7 @@ export default function LoginDesignLab() {
                       <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center shadow-xl">
                         <Rocket className="h-6 w-6 text-[hsl(213,88%,45%)]" strokeWidth={1.5} />
                       </div>
-                      <p className="text-xs font-bold">Invoice360</p>
+                      <p className="text-xs font-bold">Bi360</p>
                     </div>
                   </div>
                 )}

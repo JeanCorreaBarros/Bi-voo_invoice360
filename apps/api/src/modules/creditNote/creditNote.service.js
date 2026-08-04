@@ -1,6 +1,7 @@
-// Nota: este service no está enganchado a ninguna ruta/controller todavía.
+import { returnStock } from '../../lib/stockConsumption.js'
+
 // `db` debe ser el TenantPrismaClient de la empresa (req.db).
-export async function createCreditNote(db, data) {
+export async function createCreditNote(db, data, userId) {
 
   return db.$transaction(async (tx) => {
 
@@ -16,8 +17,11 @@ export async function createCreditNote(db, data) {
     if (!invoice)
       throw new Error("Factura no existe")
 
-    if (invoice.dianStatus !== "APPROVED")
-      throw new Error("Solo se pueden hacer notas crédito a facturas aprobadas")
+    // Nota: mientras no exista integración real con la DIAN (ver Fase B),
+    // no hay un estado "aprobada por DIAN" alcanzable — solo exigimos que
+    // la factura no esté ya anulada.
+    if (invoice.status === "CANCELLED")
+      throw new Error("No se puede hacer una nota crédito a una factura anulada")
 
     // =====================================
     // 2️⃣ VALIDAR ITEMS
@@ -61,7 +65,8 @@ export async function createCreditNote(db, data) {
       data: {
         invoiceId: data.invoiceId,
         reason: data.reason,
-        total
+        amount: total,
+        createdBy: userId || undefined
       }
     })
 
@@ -85,27 +90,14 @@ export async function createCreditNote(db, data) {
     const defaultWarehouse = await tx.warehouse.findFirst({ where: { isDefault: true } })
 
     for (const item of productsCache) {
-
-      if (item.product.type !== "SERVICE") {
-
-        await tx.product.update({
-          where: { id: item.product.id },
-          data: {
-            stock: { increment: item.quantity }
-          }
-        })
-
-        await tx.inventoryMovement.create({
-          data: {
-            productId: item.product.id,
-            type: "RETURN",
-            quantity: item.quantity,
-            reference: "CREDIT_NOTE",
-            referenceId: creditNote.id,
-            warehouseId: defaultWarehouse?.id
-          }
-        })
-      }
+      await returnStock(tx, {
+        productId: item.product.id,
+        quantity: item.quantity,
+        type: "RETURN",
+        reference: "CREDIT_NOTE",
+        referenceId: creditNote.id,
+        warehouseId: defaultWarehouse?.id
+      })
     }
 
     // =====================================
@@ -136,4 +128,26 @@ export async function createCreditNote(db, data) {
 
   })
 
+}
+
+export async function listCreditNotes(db) {
+  return db.creditNote.findMany({
+    include: {
+      invoice: { select: { id: true, orderPrefix: true, orderId: true, orderReceiverName: true } },
+      details: { include: { product: { select: { id: true, name: true, sku: true } } } },
+      user: { select: { name: true } }
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+}
+
+export async function getCreditNoteById(db, id) {
+  return db.creditNote.findUnique({
+    where: { id },
+    include: {
+      invoice: true,
+      details: { include: { product: true } },
+      user: { select: { name: true } }
+    }
+  })
 }

@@ -85,7 +85,7 @@ const AI_PROVIDERS = [
 // Debe coincidir con DEFAULT_SYSTEM_PROMPT en apps/api/src/modules/aiChat/aiChat.service.js:
 // es el prompt que el backend realmente usa cuando el usuario no definió uno propio.
 const DEFAULT_SYSTEM_PROMPT =
-  "Eres el asistente de IA de Invoice360 by Bi-voo. Ayudas al usuario con preguntas de facturación y contabilidad de su empresa."
+  "Eres el asistente de IA de Bi360 by Bi-voo. Ayudas al usuario con preguntas de facturación y contabilidad de su empresa."
 
 // Precios orientativos por millón de tokens (entrada / salida), julio-agosto 2026.
 // Contrastar con la web del proveedor antes de decidir por costo.
@@ -159,7 +159,15 @@ function ModelPicker({ provider, value, onChange }: { provider: string; value: s
 // cont_causacion_compras, cont_causacion_pagos) ya se ejecuta con reglas
 // deterministas (ver accountingHooks.js) — el resto todavía no tiene
 // ejecución real, solo guarda la preferencia/prompt para cuando se construya.
-type AIEvent = { id: string; module: "facturacion" | "contabilidad" | "inventario"; label: string; description: string; defaultPrompt: string }
+type AIEvent = { id: string; module: "facturacion" | "contabilidad" | "inventario" | "compras" | "tesoreria"; label: string; description: string; defaultPrompt: string }
+
+const MODULE_LABELS: Record<AIEvent["module"], string> = {
+  facturacion: "Facturación",
+  contabilidad: "Contabilidad",
+  inventario: "Inventario",
+  compras: "Compras",
+  tesoreria: "Tesorería",
+}
 
 const AI_EVENTS: AIEvent[] = [
   // ── Facturación ──
@@ -191,9 +199,29 @@ const AI_EVENTS: AIEvent[] = [
   { id: "cont_analisis_financiero", module: "contabilidad", label: "Análisis financiero automático", description: "Explica variaciones en utilidad, cartera o márgenes.", defaultPrompt: "Explica en lenguaje natural las variaciones en utilidad, cartera o márgenes comparando el período actual con el anterior." },
   { id: "cont_proyeccion_flujo_caja", module: "contabilidad", label: "Proyección de flujo de caja", description: "Estima ingresos y egresos futuros según el histórico.", defaultPrompt: "Con base en el histórico de ingresos y egresos, proyecta el flujo de caja de los próximos meses." },
   { id: "cont_sugerencia_centro_costo", module: "contabilidad", label: "Sugerencia de centro de costo", description: "Recomienda el centro de costo según el tipo de gasto.", defaultPrompt: "Según el tipo y descripción del gasto, sugiere el centro de costo al que debería asignarse." },
+  { id: "cont_deteccion_fraude", module: "contabilidad", label: "Detección de fraude", description: "Señala patrones de comprobantes que podrían indicar fraude o manipulación.", defaultPrompt: "Revisa los comprobantes recientes y señala patrones sospechosos (montos redondos repetidos, mismo usuario y cuenta en horarios inusuales, reversos seguidos de reingresos, etc.) que ameriten revisión manual. No acuses, solo señala qué revisar y por qué." },
+  { id: "cont_explicacion_movimiento", module: "contabilidad", label: "Explicación de cada movimiento", description: "Explica en lenguaje sencillo qué significa un comprobante o movimiento específico.", defaultPrompt: "Explica en lenguaje sencillo, para alguien sin formación contable, qué significa este movimiento/comprobante y por qué se registró así." },
+  { id: "cont_busqueda_natural", module: "contabilidad", label: "Búsqueda en lenguaje natural", description: "Responde preguntas sobre tus datos contables en español simple.", defaultPrompt: "Responde la pregunta del usuario usando únicamente los datos contables que te compartí como contexto. Si no hay suficiente información, dilo explícitamente en vez de inventar cifras." },
+
+  { id: "fact_sugerencia_descuento", module: "facturacion", label: "Sugerencia de descuentos", description: "Recomienda si conviene ofrecer un descuento según el cliente y el monto.", defaultPrompt: "Según el historial del cliente y el monto de la factura, sugiere si aplicar un descuento y de cuánto, justificando brevemente." },
+  { id: "fact_validacion_factura", module: "facturacion", label: "Validación completa antes de emitir", description: "Revisa ítems, totales, impuestos y datos del cliente antes de emitir la factura.", defaultPrompt: "Revisa la factura completa (ítems, cantidades, precios, impuestos, totales y datos del cliente) y señala cualquier inconsistencia antes de emitirla." },
+
+  { id: "compras_comparacion_proveedores", module: "compras", label: "Comparación de proveedores", description: "Compara precios y condiciones entre proveedores para un mismo producto.", defaultPrompt: "Compara los proveedores disponibles para este producto según precio histórico y condiciones, y resume las diferencias." },
+  { id: "compras_recomendacion_proveedor", module: "compras", label: "Recomendación del mejor proveedor", description: "Recomienda a qué proveedor comprarle según historial de precio y cumplimiento.", defaultPrompt: "Con base en el historial de compras (precio, frecuencia, cumplimiento), recomienda el mejor proveedor para esta compra." },
+  { id: "compras_analisis_precios", module: "compras", label: "Análisis de precios históricos", description: "Explica cómo ha variado el precio de compra de un producto en el tiempo.", defaultPrompt: "Analiza el histórico de precios de compra de este producto y explica la tendencia (subiendo, bajando, estable) y si el precio actual es razonable." },
+  { id: "compras_prediccion_compras", module: "compras", label: "Predicción de compras futuras", description: "Estima qué y cuánto habrá que comprar próximamente según el consumo.", defaultPrompt: "Según el consumo/ventas recientes y el stock actual, estima qué productos habrá que comprar en las próximas semanas y en qué cantidad aproximada." },
+
+  { id: "tesoreria_prediccion_liquidez", module: "tesoreria", label: "Predicción de liquidez", description: "Estima si habrá suficiente efectivo disponible en los próximos días/semanas.", defaultPrompt: "Con base en el flujo de caja histórico, cartera por cobrar y cuentas por pagar, estima la liquidez esperada en las próximas semanas." },
+  { id: "tesoreria_alertas_deficit", module: "tesoreria", label: "Alertas de déficit de caja", description: "Avisa si se proyecta quedarse corto de efectivo.", defaultPrompt: "Revisa los compromisos de pago próximos contra el saldo e ingresos esperados, y alerta si hay riesgo de déficit de caja, indicando cuándo y de cuánto." },
+  { id: "tesoreria_proyeccion_impuestos", module: "tesoreria", label: "Proyección de impuestos a pagar", description: "Estima el monto aproximado de impuestos que habrá que pagar próximamente.", defaultPrompt: "Con base en las ventas, compras e IVA del período, estima aproximadamente cuánto habrá que pagar de impuestos en el próximo vencimiento." },
+  { id: "tesoreria_simulacion_financiera", module: "tesoreria", label: "Simulación financiera", description: "Simula el impacto de una decisión (nuevo gasto, crédito, inversión) en la caja.", defaultPrompt: "Simula el impacto en el flujo de caja de la situación planteada por el usuario, con supuestos razonables y explicando el resultado en lenguaje simple." },
+
+  { id: "inv_recomendacion_compras", module: "inventario", label: "Recomendación de compras de inventario", description: "Sugiere qué productos comprar pronto según ventas y stock actual.", defaultPrompt: "Según las ventas recientes, el stock actual y los mínimos configurados, recomienda qué productos comprar pronto y una cantidad razonable." },
 
   { id: "inv_analisis_inventario", module: "inventario", label: "Análisis de inventario automático", description: "Explica el estado del inventario: valor, rotación, agotados y sobrestock.", defaultPrompt: "Analiza el estado del inventario (valor total, productos agotados, próximos a agotarse, sobrestock y rotación) y explica en lenguaje sencillo qué necesita atención y por qué." },
   { id: "inv_sugerencia_reposicion", module: "inventario", label: "Sugerencia de reposición de stock", description: "Recomienda qué productos reabastecer y en qué cantidad según su rotación.", defaultPrompt: "Con base en el stock actual, el mínimo configurado y las ventas recientes, sugiere qué productos reabastecer primero y una cantidad razonable de reposición." },
+
+  { id: "cont_borrador_declaracion_renta", module: "contabilidad", label: "Borrador de Declaración de Renta (IA)", description: "Redacta un borrador orientativo de la declaración de renta a partir de las cifras contables del año.", defaultPrompt: "Eres un asistente contable. A partir de las cifras contables anuales entregadas, redacta un BORRADOR ORIENTATIVO de declaración de renta para una pyme colombiana: resume ingresos brutos, costos y gastos deducibles, renta líquida gravable estimada y el impuesto estimado con la tarifa indicada. Explica claramente los supuestos y simplificaciones usadas. Deja explícito en la respuesta que este borrador NO es una declaración oficial, que no incluye la conciliación fiscal completa (diferencias entre renta contable y fiscal, rentas exentas, descuentos tributarios, etc.) y que debe ser revisado y ajustado por un contador o revisor fiscal antes de presentarse ante la DIAN." },
 ]
 
 export default function ConfiguracionPage() {
@@ -1154,13 +1182,13 @@ export default function ConfiguracionPage() {
                           </div>
 
                           <div className="max-h-[520px] overflow-y-auto pr-1 space-y-6">
-                            {(["facturacion", "contabilidad", "inventario"] as const).map((mod) => {
+                            {(["facturacion", "contabilidad", "inventario", "compras", "tesoreria"] as const).map((mod) => {
                               const events = AI_EVENTS.filter((ev) => ev.module === mod && matchesEventSearch(ev))
                               if (events.length === 0) return null
                               return (
                                 <div key={mod} className="space-y-2">
                                   <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
-                                    {mod === "facturacion" ? "Facturación" : mod === "contabilidad" ? "Contabilidad" : "Inventario"}
+                                    {MODULE_LABELS[mod]}
                                   </p>
                                   <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
                                     {events.map((ev) => (
@@ -1803,7 +1831,7 @@ export default function ConfiguracionPage() {
                   </div>
 
                   <div className="max-h-[420px] overflow-y-auto pr-1 space-y-4">
-                    {(["facturacion", "contabilidad", "inventario"] as const).map((mod) => {
+                    {(["facturacion", "contabilidad", "inventario", "compras", "tesoreria"] as const).map((mod) => {
                       const events = AI_EVENTS.filter((ev) => ev.module === mod && matchesEventSearch(ev))
                       if (events.length === 0) return null
                       return (

@@ -297,10 +297,17 @@ export default function ComprobantesPage() {
               const expanded = expandedId === entry.id
               return (
                 <div key={entry.id}>
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setExpandedId(expanded ? null : entry.id)}
-                    className="w-full flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        setExpandedId(expanded ? null : entry.id)
+                      }
+                    }}
+                    className="w-full flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left cursor-pointer"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <ChevronDown className={`h-4 w-4 text-gray-400 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
@@ -329,7 +336,7 @@ export default function ComprobantesPage() {
                         </Button>
                       )}
                     </div>
-                  </button>
+                  </div>
                   {expanded && (
                     <div className="px-5 pb-4 bg-gray-50/60">
                       <p className="text-xs text-gray-500 sm:hidden mb-2">{entry.description || "Sin descripción"}</p>

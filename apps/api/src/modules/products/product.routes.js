@@ -9,7 +9,12 @@ import {
   update,
   activate,
   deactivate,
-  move
+  move,
+  getComponents,
+  setComponents,
+  getAllKits,
+  getVariants,
+  addVariant
 } from './product.controller.js'
 
 const router = Router()
@@ -23,6 +28,8 @@ router.post(
 )
 
 router.get('/', list)
+
+router.get('/kits', getAllKits)
 
 router.get('/:id', getById)
 
@@ -48,6 +55,20 @@ router.post(
   '/:id/move',
   audit({ action: 'MOVE_STOCK', module: 'INVENTORY' }),
   move
+)
+
+router.get('/:id/components', getComponents)
+router.put(
+  '/:id/components',
+  audit({ action: 'UPDATE', module: 'KIT' }),
+  setComponents
+)
+
+router.get('/:id/variants', getVariants)
+router.post(
+  '/:id/variants',
+  audit({ action: 'CREATE', module: 'PRODUCT_VARIANT' }),
+  addVariant
 )
 
 export default router

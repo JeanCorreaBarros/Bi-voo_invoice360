@@ -1,4 +1,5 @@
 import { causeInvoiceSale } from '../../lib/accountingHooks.js'
+import { consumeStock } from '../../lib/stockConsumption.js'
 
 export async function createInvoice(db, data) {
   return db.$transaction(async (tx) => {
@@ -39,7 +40,11 @@ export async function createInvoice(db, data) {
       // Usar orderItemQuantity si existe, sino quantity
       const quantity = Number(item.orderItemQuantity || item.quantity)
 
-      if (product.type !== "SERVICE") {
+      // Un KIT no lleva stock propio (se arma de sus componentes al
+      // vender, ver stockConsumption.js), así que su disponibilidad no se
+      // valida aquí contra `product.stock` — consumeStock() valida cada
+      // componente por separado más abajo.
+      if (product.type !== "SERVICE" && product.type !== "KIT") {
         if (product.stock < quantity)
           throw new Error(`Stock insuficiente para ${product.name}`)
       }
@@ -124,7 +129,7 @@ export async function createInvoice(db, data) {
 
     const invoice = await tx.invoice.create({
       data: {
-        status: data.status || "1",
+        status: data.status || "PENDING",
         dianStatus: "PENDING",
 
         orderId: nextNumber,
@@ -202,27 +207,15 @@ export async function createInvoice(db, data) {
     const defaultWarehouse = await tx.warehouse.findFirst({ where: { isDefault: true } })
 
     for (const item of productsCache) {
-
-      if (item.product.type !== "SERVICE") {
-
-        await tx.product.update({
-          where: { id: item.product.id },
-          data: {
-            stock: { decrement: item.quantity }
-          }
-        })
-
-        await tx.inventoryMovement.create({
-          data: {
-            productId: item.product.id,
-            type: "SALE",
-            quantity: item.quantity,
-            reference: "INVOICE",
-            referenceId: invoice.id,
-            warehouseId: defaultWarehouse?.id
-          }
-        })
-      }
+      await consumeStock(tx, {
+        productId: item.product.id,
+        quantity: item.quantity,
+        type: "SALE",
+        reference: "INVOICE",
+        referenceId: invoice.id,
+        warehouseId: defaultWarehouse?.id,
+        userId: data.userId
+      })
     }
 
     // ===============================
@@ -389,7 +382,11 @@ export async function updateInvoice(db, id, data) {
       // Usar orderItemQuantity si existe, sino quantity
       const quantity = Number(item.orderItemQuantity || item.quantity)
 
-      if (product.type !== "SERVICE") {
+      // Un KIT no lleva stock propio (se arma de sus componentes al
+      // vender, ver stockConsumption.js), así que su disponibilidad no se
+      // valida aquí contra `product.stock` — consumeStock() valida cada
+      // componente por separado más abajo.
+      if (product.type !== "SERVICE" && product.type !== "KIT") {
         if (product.stock < quantity)
           throw new Error(`Stock insuficiente para ${product.name}`)
       }
@@ -536,27 +533,15 @@ export async function updateInvoice(db, id, data) {
     const defaultWarehouseUpdate = await tx.warehouse.findFirst({ where: { isDefault: true } })
 
     for (const item of productsCache) {
-
-      if (item.product.type !== "SERVICE") {
-
-        await tx.product.update({
-          where: { id: item.product.id },
-          data: {
-            stock: { decrement: item.quantity }
-          }
-        })
-
-        await tx.inventoryMovement.create({
-          data: {
-            productId: item.product.id,
-            type: "SALE",
-            quantity: item.quantity,
-            reference: "INVOICE-UPDATE",
-            referenceId: id,
-            warehouseId: defaultWarehouseUpdate?.id
-          }
-        })
-      }
+      await consumeStock(tx, {
+        productId: item.product.id,
+        quantity: item.quantity,
+        type: "SALE",
+        reference: "INVOICE-UPDATE",
+        referenceId: id,
+        warehouseId: defaultWarehouseUpdate?.id,
+        userId: data.userId
+      })
     }
 
     // =====================================
@@ -823,4 +808,29 @@ export async function updateInvoiceStatus(db, invoiceId) {
     data: { status }
   });
 
+}
+
+// Facturación masiva: crea muchas facturas independientes en una sola
+// llamada. Cada una corre en su propia transacción vía createInvoice — un
+// fallo (ej. resolución agotada, producto sin stock) no debe tumbar el
+// resto del lote, así que se captura por ítem en vez de envolver todo en
+// una transacción global.
+export async function createBulkInvoices(db, invoicesData) {
+  const results = []
+
+  for (let i = 0; i < invoicesData.length; i++) {
+    try {
+      const invoice = await createInvoice(db, invoicesData[i])
+      results.push({ index: i, ok: true, invoiceId: invoice.id, orderPrefix: invoice.orderPrefix, orderId: invoice.orderId })
+    } catch (error) {
+      results.push({ index: i, ok: false, message: error.message })
+    }
+  }
+
+  return {
+    total: invoicesData.length,
+    successCount: results.filter((r) => r.ok).length,
+    failureCount: results.filter((r) => !r.ok).length,
+    results
+  }
 }

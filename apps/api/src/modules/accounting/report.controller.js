@@ -5,7 +5,8 @@ import {
   getBalanceSheet,
   getIncomeStatement,
   getCustomerStatement,
-  getSupplierStatement
+  getSupplierStatement,
+  getFinancialIndicators
 } from './report.service.js'
 import { generateTrialBalanceExcel, generateBalanceSheetExcel, generateIncomeStatementExcel } from './report.excel.js'
 import { generateAccountingReportPDF } from './report.pdf.js'
@@ -54,6 +55,16 @@ export async function incomeStatement(req, res) {
   try {
     const { from, to } = req.query
     const data = await getIncomeStatement(req.db, { from, to })
+    res.json({ ok: true, data })
+  } catch (error) {
+    res.status(400).json({ ok: false, message: error.message })
+  }
+}
+
+export async function financialIndicators(req, res) {
+  try {
+    const { asOf } = req.query
+    const data = await getFinancialIndicators(req.db, { asOf })
     res.json({ ok: true, data })
   } catch (error) {
     res.status(400).json({ ok: false, message: error.message })

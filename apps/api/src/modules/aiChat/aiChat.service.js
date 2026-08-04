@@ -1,7 +1,7 @@
 import { decrypt } from '../../lib/crypto.js'
 
 const DEFAULT_SYSTEM_PROMPT =
-  'Eres el asistente de IA de Invoice360 by Bi-voo. Ayudas al usuario con preguntas de facturación y contabilidad de su empresa.'
+  'Eres el asistente de IA de Bi360 by Bi-voo. Ayudas al usuario con preguntas de facturación y contabilidad de su empresa.'
 
 async function callOpenAI({ apiKey, model, temperature, systemPrompt, messages }) {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {

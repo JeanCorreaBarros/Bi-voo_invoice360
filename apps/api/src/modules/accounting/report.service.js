@@ -185,6 +185,62 @@ export async function getIncomeStatement(db, { from, to } = {}) {
   return { income, cost, expense, totalIncome, totalCost, grossProfit, totalExpense, netIncome }
 }
 
+// Indicadores Financieros: liquidez, endeudamiento y rentabilidad, derivados
+// del Balance General y Estado de Resultados (ambos ya calculados en vivo).
+// Nota: el PUC estándar colombiano no separa corto/largo plazo con códigos
+// distintos, así que activo/pasivo "corriente" se aproxima por clase de
+// cuenta (11-14 activo corriente, 22-26 y 28 pasivo corriente; 21 Obligaciones
+// Financieras y 27 Diferidos se tratan como largo plazo) — es una aproximación
+// razonable para una pyme, no un dictamen contable formal.
+const CURRENT_ASSET_PREFIXES = ['11', '12', '13', '14']
+const INVENTORY_PREFIX = '14'
+const CURRENT_LIABILITY_PREFIXES = ['22', '23', '24', '25', '26', '28']
+
+function safeDivide(a, b) {
+  return b === 0 ? null : a / b
+}
+
+export async function getFinancialIndicators(db, { asOf } = {}) {
+  const [balance, income] = await Promise.all([
+    getBalanceSheet(db, { asOf }),
+    getIncomeStatement(db, { to: asOf })
+  ])
+
+  const currentAssets = sumBalances(balance.assets.filter((a) => CURRENT_ASSET_PREFIXES.some((p) => a.code.startsWith(p))))
+  const inventory = sumBalances(balance.assets.filter((a) => a.code.startsWith(INVENTORY_PREFIX)))
+  const currentLiabilities = sumBalances(balance.liabilities.filter((l) => CURRENT_LIABILITY_PREFIXES.some((p) => l.code.startsWith(p))))
+
+  const { totalAssets, totalLiabilities, totalEquity, netIncome } = balance
+  const { totalIncome, grossProfit } = income
+
+  return {
+    asOf: asOf || new Date().toISOString().slice(0, 10),
+    liquidez: {
+      activoCorriente: currentAssets,
+      pasivoCorriente: currentLiabilities,
+      razonCorriente: safeDivide(currentAssets, currentLiabilities),
+      pruebaAcida: safeDivide(currentAssets - inventory, currentLiabilities),
+      capitalTrabajo: currentAssets - currentLiabilities
+    },
+    endeudamiento: {
+      totalPasivo: totalLiabilities,
+      totalActivo: totalAssets,
+      totalPatrimonio: totalEquity,
+      nivelEndeudamiento: safeDivide(totalLiabilities, totalAssets),
+      endeudamientoPatrimonial: safeDivide(totalLiabilities, totalEquity)
+    },
+    rentabilidad: {
+      ingresos: totalIncome,
+      utilidadBruta: grossProfit,
+      utilidadNeta: netIncome,
+      margenBruto: safeDivide(grossProfit, totalIncome),
+      margenNeto: safeDivide(netIncome, totalIncome),
+      roa: safeDivide(netIncome, totalAssets),
+      roe: safeDivide(netIncome, totalEquity)
+    }
+  }
+}
+
 // Estado de cuenta de un cliente: factura por factura (por NIT, ya que
 // Invoice no tiene FK a Customer — solo guarda el NIT como texto), con sus
 // pagos y saldo pendiente.

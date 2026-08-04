@@ -191,7 +191,7 @@ export function LoginPage() {
           </div>
 
           <h1 className="text-2xl lg:text-3xl font-bold tracking-tight leading-none">
-            Invoice360
+            Bi360
             <span className="block text-[10px] lg:text-xs font-semibold uppercase tracking-[0.3em] text-white/70 mt-2">
               by <span className="bg-gradient-to-r from-purple-300 to-pink-300 text-transparent bg-clip-text font-black drop-shadow-[0_0_12px_rgba(216,180,254,0.4)]">Bi-voo</span>
             </span>
