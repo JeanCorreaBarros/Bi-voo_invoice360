@@ -11,6 +11,43 @@ services:
       - "5433:5432"
     volumes:
       - plasticoslc-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plasticoslc -d plasticoslc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: plasticoslc-api
+    restart: unless-stopped
+    command: npm run dev
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PLATFORM_DATABASE_URL: "postgresql://plasticoslc:plasticoslc@db:5432/plasticoslc_platform?schema=public"
+      DATABASE_URL: "postgresql://plasticoslc:plasticoslc@db:5432/plasticoslc?schema=public"
+      TENANT_DB_HOST: db
+      TENANT_DB_PORT: "5432"
+      TENANT_DB_USER: plasticoslc
+      TENANT_DB_PASSWORD: plasticoslc
+      POSTGRES_ADMIN_URL: "postgresql://plasticoslc:plasticoslc@db:5432/postgres"
+      JWT_SECRET: "${JWT_SECRET:-dev-jwt-secret-cambia-en-produccion}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}"
+      SUPER_ADMIN_EMAIL: "${SUPER_ADMIN_EMAIL:-admin@plasticoslc.com}"
+      SUPER_ADMIN_PASSWORD: "${SUPER_ADMIN_PASSWORD:-Admin123*}"
+      PORT: 3000
+    ports:
+      - "4000:3000"
+    volumes:
+      - ./apps/api:/app
+      - /app/node_modules
+      - /app/src/generated
+      - api-uploads:/app/uploads
 
 volumes:
   plasticoslc-db-data:
+  api-uploads:

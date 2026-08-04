@@ -3,9 +3,9 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev": "concurrently -n web,api -c blue,green \"pnpm --filter web dev\" \"pnpm --filter api dev\"",
+    "dev": "concurrently -n web,api -c blue,green \"pnpm --filter web dev\" \"npm --prefix apps/api run dev\"",
     "dev:web": "pnpm --filter web dev",
-    "dev:api": "pnpm --filter api dev",
+    "dev:api": "npm --prefix apps/api run dev",
     "build:web": "pnpm --filter web build",
     "db:migrate": "pnpm --filter api exec prisma migrate dev",
     "db:seed": "pnpm --filter api exec prisma db seed",

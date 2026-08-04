@@ -21,10 +21,35 @@ Al arrancar, el servidor deja todo listo solo (idempotente, sin pasos manuales e
 
 - Node.js 20+
 - [pnpm](https://pnpm.io/) (usado por `apps/web` y los scripts de la raíz) — versión fijada en `package.json` (`packageManager`)
-- Docker (para levantar Postgres localmente; opcional si ya tienes uno propio)
+- Docker (para levantar Postgres, y opcionalmente la API, localmente)
 - Git
 
-## 🛠️ Instalación local
+## 🐳 Arranque rápido con Docker (recomendado)
+
+La API (Express + Prisma) y Postgres corren juntas en Docker con hot-reload; solo el frontend se levanta aparte con pnpm.
+
+```bash
+git clone https://github.com/JeanCorreaBarros/Bi-voo_invoice360.git
+cd Bi-voo_invoice360
+
+docker compose up -d      # Postgres + API (crea la BD de plataforma y el SUPER_ADMIN solos)
+
+cd apps/web
+pnpm install
+pnpm dev                  # Frontend en http://localhost:3000
+```
+
+- API: `http://localhost:4000` (contenedor `plasticoslc-api`, hot-reload vía nodemon montando `apps/api`)
+- Postgres: `localhost:5433` (contenedor `plasticoslc-db`)
+- Login por defecto: `admin@plasticoslc.com` / `Admin123*` (**solo desarrollo local** — ver abajo cómo cambiarlo)
+- `docker compose down` apaga todo; los datos (BD y uploads) quedan en volúmenes con nombre y sobreviven al reinicio.
+- Para reconstruir la imagen de la API tras cambiar `package.json` o el `Dockerfile`: `docker compose up -d --build`.
+
+**Cambiar los secretos por defecto** (JWT, clave de cifrado, credenciales del super-admin): copia `.env.example` de la raíz a `.env` y define tus propios valores — `docker compose` lo lee automáticamente. Sin ese archivo, se usan los defaults de `docker-compose.yml`, válidos solo para desarrollo local.
+
+## 🛠️ Instalación manual (sin Docker para la API)
+
+Alternativa si prefieres correr la API directo con Node (por ejemplo, para autorar migraciones de Prisma con `prisma migrate dev`).
 
 1. **Clonar el repositorio**
    ```bash
@@ -75,14 +100,16 @@ Al arrancar, el servidor deja todo listo solo (idempotente, sin pasos manuales e
 
 ## 🏃 Ejecución en desarrollo
 
-Desde la raíz, levanta ambos servicios a la vez:
+Desde la raíz, levanta ambos servicios a la vez (`apps/api` no es parte del workspace pnpm, así que el script usa `npm --prefix` por debajo):
 ```bash
 pnpm dev
 ```
-- Web: `http://localhost:3005` (o el puerto configurado)
+- Web: `http://localhost:3000` (o el puerto configurado)
 - API: `http://localhost:4000` (según `PORT` en `apps/api/.env`)
 
 O por separado: `pnpm dev:web` / `pnpm dev:api`.
+
+O usa el flujo con Docker de arriba, que evita tener que levantar la API a mano.
 
 ## 🔐 Variables de entorno
 
