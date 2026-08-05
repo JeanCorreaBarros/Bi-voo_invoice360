@@ -157,4 +157,51 @@
     padding: 24px;
     box-shadow: none !important;
   }
+  /* Ticket del POS: formato angosto de comprobante térmico (80mm), no una
+     hoja completa — a diferencia de los bloques anteriores. Vive dentro de
+     un <Dialog> de shadcn/Radix, que centra su contenido con
+     `position: fixed` + `transform: translate(-50%,-50%)`. Ese transform
+     en un ancestro convierte al diálogo en el "containing block" de
+     cualquier descendiente `position: fixed`, así que el recibo terminaba
+     posicionado relativo al modal (colapsado) en vez de a la hoja — de ahí
+     la impresión en blanco. Se neutraliza el diálogo a `static` para que
+     el recibo fluya normalmente como contenido de página.
+  */
+  [role="dialog"] {
+    position: static !important;
+    transform: none !important;
+    inset: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+  /* `visibility: hidden` no le quita el alto al contenido de la página del
+     POS que queda detrás del diálogo — solo lo hace invisible, sigue
+     ocupando espacio en el documento y empuja el recibo a una segunda
+     hoja. Se colapsa por completo con display:none. */
+  #pos-page-root {
+    display: none !important;
+  }
+  #pos-ticket-print,
+  #pos-ticket-print * {
+    visibility: visible;
+  }
+  #pos-ticket-print {
+    position: static !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    max-height: none !important;
+    height: auto;
+    margin: 0 auto !important;
+    padding: 3mm;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
 }

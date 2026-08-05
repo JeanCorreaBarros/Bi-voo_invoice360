@@ -24,7 +24,10 @@ export async function seedTenantRolesAndPermissions(tenantDb) {
     'accounting.entry.read',
     'accounting.entry.manage',
     'accounting.settings.manage',
-    'accounting.audit.read'
+    'accounting.audit.read',
+
+    'pos.sell',
+    'pos.manage'
   ]
 
   for (const code of permissionsList) {

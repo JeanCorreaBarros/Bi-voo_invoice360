@@ -51,6 +51,9 @@ model User {
   recurringInvoiceTemplates RecurringInvoiceTemplate[]
   scheduledInvoices         ScheduledInvoice[]
 
+  posSessionsOpened PosSession[] @relation("PosSessionOpenedBy")
+  posSessionsClosed PosSession[] @relation("PosSessionClosedBy")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -267,6 +270,7 @@ model Warehouse {
   movements     InventoryMovement[]
   transfersFrom StockTransfer[]     @relation("TransferFrom")
   transfersTo   StockTransfer[]     @relation("TransferTo")
+  posSettings   PosSettings[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -372,6 +376,11 @@ model Invoice {
   recurringTemplate    RecurringInvoiceTemplate? @relation(fields: [recurringTemplateId], references: [id])
   scheduledInvoice     ScheduledInvoice?
 
+  // Presente solo si la factura se generó desde el POS: permite calcular
+  // el arqueo del turno (ventas + pagos en efectivo de ese lapso).
+  posSessionId String?
+  posSession   PosSession? @relation(fields: [posSessionId], references: [id])
+
   @@unique([orderPrefix, orderId])
   @@map("invoices")
 }
@@ -408,6 +417,8 @@ model Resolution {
   toNumber      Int
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
+
+  posSettings PosSettings[]
 
   @@map("resolutions")
 }
@@ -656,6 +667,10 @@ model Payment {
   createdBy String? // usuario que registró el pago
   user      User?   @relation(fields: [createdBy], references: [id])
 
+  // Presente solo si el pago se registró desde el POS.
+  posSessionId String?
+  posSession   PosSession? @relation(fields: [posSessionId], references: [id])
+
   createdAt DateTime @default(now())
 }
 
@@ -680,7 +695,67 @@ model CashMovement {
   userId String
   user   User   @relation(fields: [userId], references: [id])
 
+  // Presente si el movimiento ocurrió dentro de un turno de caja del POS
+  // (entradas/salidas manuales de efectivo durante el turno).
+  posSessionId String?
+  posSession   PosSession? @relation(fields: [posSessionId], references: [id])
+
   createdAt DateTime @default(now())
+}
+
+// ===================================================
+// PUNTO DE VENTA (POS)
+// ===================================================
+
+// Configuración única del POS por empresa: qué resolución/prefijo usa para
+// numerar sus facturas y de qué bodega descuenta stock. Fila singleton
+// (id siempre 1), igual que AccountingSettings.
+model PosSettings {
+  id Int @id @default(1)
+
+  resolutionId Int?
+  resolution   Resolution? @relation(fields: [resolutionId], references: [id])
+
+  warehouseId String?
+  warehouse   Warehouse? @relation(fields: [warehouseId], references: [id])
+
+  updatedAt DateTime @updatedAt
+}
+
+enum PosSessionStatus {
+  OPEN
+  CLOSED
+}
+
+// Turno de caja del POS: agrupa las ventas y movimientos de efectivo entre
+// una apertura y un cierre, para poder hacer arqueo (efectivo esperado vs.
+// contado físicamente).
+model PosSession {
+  id String @id @default(cuid())
+
+  status PosSessionStatus @default(OPEN)
+
+  openingAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  // Calculados y guardados al cerrar el turno.
+  expectedCashAmount Decimal? @db.Decimal(14, 2)
+  countedCashAmount  Decimal? @db.Decimal(14, 2)
+  cashDifference     Decimal? @db.Decimal(14, 2)
+
+  note String?
+
+  openedById String
+  openedBy   User   @relation("PosSessionOpenedBy", fields: [openedById], references: [id])
+
+  closedById String?
+  closedBy   User?   @relation("PosSessionClosedBy", fields: [closedById], references: [id])
+
+  invoices      Invoice[]
+  payments      Payment[]
+  cashMovements CashMovement[]
+
+  openedAt DateTime  @default(now())
+  closedAt DateTime?
 }
 
 model CreditNote {

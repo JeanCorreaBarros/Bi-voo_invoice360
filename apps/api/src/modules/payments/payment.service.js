@@ -1,9 +1,14 @@
 import { causeInvoicePayment } from '../../lib/accountingHooks.js'
 
+// Igual que en invoice.service.js: `createPayment` abre su propia
+// transacción, `createPaymentCore` recibe un `tx` ya abierto para poder
+// registrar varios pagos (efectivo + tarjeta + ...) junto con la factura
+// del POS en una sola transacción atómica.
 export async function createPayment(db, data, userId) {
+  return db.$transaction(async (tx) => createPaymentCore(tx, data, userId))
+}
 
-  return db.$transaction(async (tx) => {
-
+export async function createPaymentCore(tx, data, userId) {
     // 1️⃣ buscar factura
     const invoice = await tx.invoice.findUnique({
       where: { id: data.invoiceId },
@@ -23,7 +28,9 @@ export async function createPayment(db, data, userId) {
         amount: Number(data.amount),
         method: data.method,
         reference: data.reference || null,
-        createdBy: userId || null
+        note: data.note || null,
+        createdBy: userId || null,
+        posSessionId: data.posSessionId || null
       }
     })
 
@@ -67,7 +74,4 @@ export async function createPayment(db, data, userId) {
     })
 
     return payment
-
-  })
-
 }

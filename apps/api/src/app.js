@@ -58,6 +58,7 @@ import aiChatRoutes from "./modules/aiChat/aiChat.routes.js"
 import treasuryRoutes from "./modules/treasury/treasury.routes.js"
 import purchasePaymentRoutes from "./modules/purchases/purchasePayment.routes.js"
 import fixedAssetRoutes from "./modules/fixedAssets/fixedAsset.routes.js"
+import posRoutes from "./modules/pos/pos.routes.js"
 
 
 dotenv.config()
@@ -133,5 +134,7 @@ app.use("/api/treasury", treasuryRoutes)
 app.use("/api/purchase-payments", purchasePaymentRoutes)
 
 app.use("/api/fixed-assets", fixedAssetRoutes)
+
+app.use("/api/pos", posRoutes)
 
 export default app

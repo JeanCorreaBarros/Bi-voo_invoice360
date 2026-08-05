@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 import {
   LayoutDashboard, ListTree, BookText, Landmark, BookOpen, Scale, Settings2,
   BarChart3, TrendingUp, Wallet, Building2, ClipboardCheck, Package, Lock,
@@ -162,6 +163,8 @@ export function ModuleSidebar({ module }: { module: ModuleKey }) {
   const router = useRouter()
   const isActive = useIsActive(root)
   const { collapsed, toggle } = useCollapsedPreference()
+  const { user } = useAuth()
+  const companyName = user?.company?.businessName
 
   return (
     <aside
@@ -170,19 +173,29 @@ export function ModuleSidebar({ module }: { module: ModuleKey }) {
       }`}
       aria-label={`Navegación de ${module}`}
     >
-      <button
-        type="button"
-        onClick={toggle}
-        title={collapsed ? "Expandir menú" : "Colapsar menú"}
-        aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
-        aria-expanded={!collapsed}
-        className={`flex items-center gap-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-[hsl(209,79%,35%)] transition-colors shrink-0 mb-3 ${
-          collapsed ? "justify-center h-9 w-full" : "self-end h-9 px-2.5"
-        }`}
-      >
-        {collapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
-        {!collapsed && <span className="text-xs font-semibold">Ocultar</span>}
-      </button>
+      <div className={`flex items-center mb-3 ${collapsed ? "justify-center" : "justify-between gap-2"}`}>
+        {!collapsed && companyName && (
+          <p
+            className="text-xs font-semibold text-gray-500 truncate min-w-0"
+            title={companyName}
+          >
+            {companyName}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={toggle}
+          title={collapsed ? "Expandir menú" : "Colapsar menú"}
+          aria-label={collapsed ? "Expandir menú" : "Colapsar menú"}
+          aria-expanded={!collapsed}
+          className={`flex items-center gap-2 rounded-xl text-gray-400 hover:bg-gray-100 hover:text-[hsl(209,79%,35%)] transition-colors shrink-0 ${
+            collapsed ? "justify-center h-9 w-full" : "h-9 px-2.5"
+          }`}
+        >
+          {collapsed ? <PanelLeftOpen className="h-[18px] w-[18px]" /> : <PanelLeftClose className="h-[18px] w-[18px]" />}
+          {!collapsed && <span className="text-xs font-semibold">Ocultar</span>}
+        </button>
+      </div>
 
       <div className={collapsed ? "space-y-2" : "space-y-4"}>
         {sections.map((section) => (

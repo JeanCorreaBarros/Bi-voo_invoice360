@@ -1,9 +1,16 @@
 import { causeInvoiceSale } from '../../lib/accountingHooks.js'
 import { consumeStock } from '../../lib/stockConsumption.js'
 
+// `createInvoice` abre su propia transacción; `createInvoiceCore` es la
+// misma lógica pero recibe un `tx` ya abierto, para poder componerla con
+// otras operaciones (pagos, turno de caja) dentro de UNA sola transacción
+// atómica — la usa el POS (pos.service.js) para que venta + pago + stock +
+// causación contable vivan o mueran juntos.
 export async function createInvoice(db, data) {
-  return db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => createInvoiceCore(tx, data))
+}
 
+export async function createInvoiceCore(tx, data) {
     let totalBeforeTax = 0
     let totalTax = 0
     let totalAfterTax = 0
@@ -144,6 +151,9 @@ export async function createInvoice(db, data) {
 
         userId: data.userId,
 
+        // Marca la factura como generada por el POS (turno de caja).
+        posSessionId: data.posSessionId || null,
+
         // 🔹 INFORMACIÓN ADICIONAL
         orderDate: orderDateObj,
         note: data.note || null,
@@ -204,7 +214,12 @@ export async function createInvoice(db, data) {
     // 6️⃣ DESCONTAR STOCK + MOVIMIENTO
     // ===============================
 
-    const defaultWarehouse = await tx.warehouse.findFirst({ where: { isDefault: true } })
+    // Si el llamador especifica una bodega (p. ej. PosSettings.warehouseId
+    // en una venta del POS) se descuenta de ahí; si no, de la bodega
+    // marcada como predeterminada.
+    const defaultWarehouse = data.warehouseId
+      ? { id: data.warehouseId }
+      : await tx.warehouse.findFirst({ where: { isDefault: true } })
 
     for (const item of productsCache) {
       await consumeStock(tx, {
@@ -251,7 +266,6 @@ export async function createInvoice(db, data) {
     })
 
     return fullInvoice
-  })
 }
 
 export async function updateInvoice(db, id, data) {

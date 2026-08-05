@@ -30,6 +30,7 @@ import {
   FileMinus,
   FilePlus2,
   FileStack,
+  Store,
 } from "lucide-react"
 
 import {
@@ -48,6 +49,7 @@ const navItems = [
   { icon: ShoppingCart, label: "Compras", section: "gestion", href: "/compras" },
   { icon: BookOpen, label: "Contabilidad", section: "principal", href: "/contabilidad", permission: "accounting.entry.read" },
   { icon: Boxes, label: "Inventario", section: "principal", href: "/inventario" },
+  { icon: Store, label: "POS", section: "principal", href: "/pos", permission: "pos.sell" },
   { icon: DollarSign, label: "Cartera", section: "gestion", href: "/cartera" },
   { icon: BarChart3, label: "Reportes", section: "gestion", href: "/reportes" },
   { icon: Users, label: "Clientes", section: "gestion", href: "/clientes" },
@@ -484,7 +486,9 @@ export function MobileBottomNav() {
               {/* Nav */}
               <div className="flex-1 overflow-y-auto py-3 px-2 space-y-5">
                 {SECTIONS.map((section) => {
-                  const items = navItems.filter((i) => i.section === section.key)
+                  const items = navItems.filter(
+                    (i) => i.section === section.key && (!i.permission || user?.permissions?.includes(i.permission))
+                  )
                   return (
                     <div key={section.key}>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-[hsl(228,5%,35%)] px-3 mb-1.5">
